@@ -26,6 +26,13 @@ class RedisClient {
     this.connecting = true;
 
     try {
+      logger.info('Attempting Redis connection with config', {
+        host: config.redis.host,
+        port: config.redis.port,
+        hasPassword: !!config.redis.password,
+        db: config.redis.db
+      });
+
       this.instance = new Redis({
         host: config.redis.host,
         port: config.redis.port,
