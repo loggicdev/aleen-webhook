@@ -26,22 +26,37 @@ class RedisClient {
     this.connecting = true;
 
     try {
-      logger.info('Attempting Redis connection with config', {
-        host: config.redis.host,
-        port: config.redis.port,
-        hasPassword: !!config.redis.password,
-        db: config.redis.db
-      });
+      // Se houver REDIS_URL, usar connection string
+      if (config.redis.url) {
+        logger.info('Attempting Redis connection with URL', {
+          url: config.redis.url.replace(/:([^:@]+)@/, ':***@'), // Oculta password no log
+          hasUrl: true
+        });
 
-      this.instance = new Redis({
-        host: config.redis.host,
-        port: config.redis.port,
-        password: config.redis.password || undefined,
-        db: config.redis.db,
-        enableReadyCheck: false,
-        maxRetriesPerRequest: null,
-        lazyConnect: true,
-      });
+        this.instance = new Redis(config.redis.url, {
+          enableReadyCheck: false,
+          maxRetriesPerRequest: null,
+          lazyConnect: true,
+        });
+      } else {
+        // Fallback para configuração individual
+        logger.info('Attempting Redis connection with config', {
+          host: config.redis.host,
+          port: config.redis.port,
+          hasPassword: !!config.redis.password,
+          db: config.redis.db
+        });
+
+        this.instance = new Redis({
+          host: config.redis.host,
+          port: config.redis.port,
+          password: config.redis.password || undefined,
+          db: config.redis.db,
+          enableReadyCheck: false,
+          maxRetriesPerRequest: null,
+          lazyConnect: true,
+        });
+      }
 
       // Event handlers
       this.instance.on('connect', () => {

@@ -21,6 +21,7 @@ interface Config {
     port: number;
     password?: string;
     db: number;
+    url?: string; // Connection string completa
   };
   webhooks: {
     secret: string;
@@ -54,6 +55,7 @@ const config: Config = {
     port: parseInt(process.env.REDIS_PORT || '6379', 10),
     password: process.env.REDIS_PASSWORD || undefined,
     db: parseInt(process.env.REDIS_DB || '0', 10),
+    url: process.env.REDIS_URL || undefined, // Connection string completa
   },
   webhooks: {
     secret: process.env.WEBHOOK_SECRET || '',
