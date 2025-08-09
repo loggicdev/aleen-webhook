@@ -26,9 +26,19 @@ class RedisClient {
     this.connecting = true;
 
     try {
+      // Debug da configuração Redis
+      logger.info('Redis configuration debug', {
+        hasUrl: !!config.redis.url,
+        redisUrl: config.redis.url ? config.redis.url.replace(/:([^:@]+)@/, ':***@') : null,
+        host: config.redis.host,
+        port: config.redis.port,
+        hasPassword: !!config.redis.password,
+        db: config.redis.db
+      });
+
       // Se houver REDIS_URL, usar connection string
       if (config.redis.url) {
-        logger.info('Attempting Redis connection with URL', {
+        logger.info('Using Redis connection string', {
           url: config.redis.url.replace(/:([^:@]+)@/, ':***@'), // Oculta password no log
           hasUrl: true
         });
@@ -40,7 +50,7 @@ class RedisClient {
         });
       } else {
         // Fallback para configuração individual
-        logger.info('Attempting Redis connection with config', {
+        logger.info('Using Redis individual config (no URL found)', {
           host: config.redis.host,
           port: config.redis.port,
           hasPassword: !!config.redis.password,
