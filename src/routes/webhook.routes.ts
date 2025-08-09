@@ -11,7 +11,6 @@ const webhookController = new WebhookController();
  */
 router.post(
   '/evolution',
-  validateApiKey,
   validateWebhook,
   webhookController.handleWebhook.bind(webhookController)
 );

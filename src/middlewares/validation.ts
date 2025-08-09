@@ -6,28 +6,26 @@ import { logger } from '../utils';
  * Schema de validação para o webhook da Evolution API
  */
 const evolutionWebhookSchema = Joi.object({
-  body: Joi.object({
-    event: Joi.string().required(),
-    instance: Joi.string().required(),
-    data: Joi.object({
-      key: Joi.object({
-        remoteJid: Joi.string().required(),
-        fromMe: Joi.boolean().required(),
-        id: Joi.string().required()
-      }).required(),
-      pushName: Joi.string().required(),
-      message: Joi.object().required(),
-      messageType: Joi.string().required(),
-      messageTimestamp: Joi.number().required(),
-      instanceId: Joi.string().required(),
-      source: Joi.string().valid('ios', 'android', 'web').required()
+  event: Joi.string().required(),
+  instance: Joi.string().required(),
+  data: Joi.object({
+    key: Joi.object({
+      remoteJid: Joi.string().required(),
+      fromMe: Joi.boolean().required(),
+      id: Joi.string().required()
     }).required(),
-    destination: Joi.string().uri().optional(),
-    date_time: Joi.string().isoDate().optional(),
-    sender: Joi.string().optional(),
-    server_url: Joi.string().uri().optional(),
-    apikey: Joi.string().required()
+    pushName: Joi.string().required(),
+    message: Joi.object().required(),
+    messageType: Joi.string().required(),
+    messageTimestamp: Joi.number().required(),
+    instanceId: Joi.string().required(),
+    source: Joi.string().valid('ios', 'android', 'web').required()
   }).required(),
+  destination: Joi.string().uri().optional(),
+  date_time: Joi.string().isoDate().optional(),
+  sender: Joi.string().optional(),
+  server_url: Joi.string().uri().optional(),
+  apikey: Joi.string().required(),
   webhookUrl: Joi.string().uri().optional(),
   executionMode: Joi.string().valid('production', 'development').optional()
 });

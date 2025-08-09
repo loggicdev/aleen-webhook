@@ -14,14 +14,22 @@ export class WebhookController {
    */
   public async handleWebhook(req: Request, res: Response): Promise<void> {
     try {
-      const payload: EvolutionWebhookPayload = req.body;
+      // Cria o payload no formato esperado pelo service
+      const payload: EvolutionWebhookPayload = {
+        headers: req.headers as any,
+        params: req.params,
+        query: req.query,
+        body: req.body,
+        webhookUrl: req.body.webhookUrl || '',
+        executionMode: req.body.executionMode || 'production'
+      };
       
       logger.info('Webhook received', {
-        event: payload.body.event,
-        instance: payload.body.instance,
-        messageType: payload.body.data.messageType,
-        userNumber: payload.body.data.key.remoteJid,
-        userName: payload.body.data.pushName
+        event: req.body.event,
+        instance: req.body.instance,
+        messageType: req.body.data.messageType,
+        userNumber: req.body.data.key.remoteJid,
+        userName: req.body.data.pushName
       });
 
       // Processa a mensagem usando o MessageProcessorService
