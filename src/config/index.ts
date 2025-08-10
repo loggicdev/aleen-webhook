@@ -23,13 +23,11 @@ interface Config {
     db: number;
     url?: string; // Connection string completa
   };
+  pythonAi: {
+    baseUrl: string;
+  };
   webhooks: {
     secret: string;
-    onboarding: string;
-    greeting: string;
-    doubt: string;
-    outContext: string;
-    verifyUser: string;
   };
   logging: {
     level: string;
@@ -57,13 +55,11 @@ const config: Config = {
     db: parseInt(process.env.REDIS_DB || '0', 10),
     url: process.env.REDIS_URL || undefined, // Connection string completa
   },
+  pythonAi: {
+    baseUrl: process.env.PYTHON_AI_URL || 'http://localhost:8000',
+  },
   webhooks: {
     secret: process.env.WEBHOOK_SECRET || '',
-    onboarding: process.env.ONBOARDING_WEBHOOK_URL || '',
-    greeting: process.env.GREETING_WEBHOOK_URL || '',
-    doubt: process.env.DOUBT_WEBHOOK_URL || '',
-    outContext: process.env.OUT_CONTEXT_WEBHOOK_URL || '',
-    verifyUser: process.env.VERIFY_USER_WEBHOOK_URL || '',
   },
   logging: {
     level: process.env.LOG_LEVEL || 'info',

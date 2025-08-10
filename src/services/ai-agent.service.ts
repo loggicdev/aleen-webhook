@@ -1,4 +1,5 @@
 import axios from 'axios';
+import config from '../config';
 
 interface ChatRequest {
   user_id: string;
@@ -19,7 +20,7 @@ class AiAgentService {
   private pythonServiceUrl: string;
 
   constructor() {
-    this.pythonServiceUrl = process.env.PYTHON_AI_URL || 'http://python-ai:8000';
+    this.pythonServiceUrl = config.pythonAi.baseUrl;
   }
 
   async processMessage(
