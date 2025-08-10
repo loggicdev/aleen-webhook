@@ -215,8 +215,8 @@ export class RedisMessageService {
                   recommendedAgent: userStatus.recommendedAgent
                 });
 
-                // Se é primeira mensagem ou precisa de onboarding, envia saudação e não processa com IA
-                if (userStatus.isFirstMessage || userStatus.needsOnboarding) {
+                // REMOVIDO: hardcode para primeira mensagem - agora sempre usa IA
+                if (false) { // userStatus.isFirstMessage || userStatus.needsOnboarding
                   
                   // Em vez de usar o prompt (que é para a IA), criamos uma mensagem de boas-vindas
                   const welcomeMessage = `Oi${userData.userName ? ` ${userData.userName}` : ''}! �
@@ -269,7 +269,7 @@ Quer conhecer como funciona? Temos 14 dias grátis! �`;
               }
             }
 
-            // 8. Processa com AI Agents (apenas se não for primeira mensagem/onboarding)
+            // 8. SEMPRE processa com AI Agents - sem distinção de primeira mensagem
             let aiResponse;
             try {
               if (userData && userStatus) {
