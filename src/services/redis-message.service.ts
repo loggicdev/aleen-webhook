@@ -219,11 +219,11 @@ export class RedisMessageService {
                 if (userStatus.isFirstMessage || userStatus.needsOnboarding) {
                   
                   // Busca o prompt de saudação do agente onboarding
-                  const onboardingAgent = await supabaseUserService.getAgentByType('onboarding');
+                  const onboardingAgent = await supabaseUserService.getAgentByType('GREETING_WITHOUT_MEMORY');
                   
                   let welcomeMessage: string;
-                  if (onboardingAgent?.prompt_saudacao) {
-                    welcomeMessage = onboardingAgent.prompt_saudacao
+                  if (onboardingAgent?.prompt) {
+                    welcomeMessage = onboardingAgent.prompt
                       .replace('{nome}', userData.userName || 'usuário')
                       .replace('{usuario}', userData.userName || 'usuário');
                   } else {

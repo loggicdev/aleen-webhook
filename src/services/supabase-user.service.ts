@@ -23,12 +23,12 @@ interface User {
 
 interface Agent {
   id: string;
-  nome: string;
-  tipo: string;
-  prompt_saudacao?: string;
-  prompt_onboarding?: string;
-  prompt_sistema?: string;
-  ativo: boolean;
+  identifier: string;
+  name: string;
+  prompt: string;
+  description?: string;
+  created_at: string;
+  updated_at?: string;
 }
 
 export interface UserStatus {
@@ -87,7 +87,7 @@ class SupabaseUserService {
           onboardingCompleted: true,
           userData,
           needsOnboarding: false,
-          recommendedAgent: 'support' // Usuários existentes vão para suporte
+          recommendedAgent: 'DOUBT' // Usuários existentes vão para suporte
         };
       }
 
@@ -112,7 +112,7 @@ class SupabaseUserService {
           onboardingCompleted: leadData.onboarding_concluido || false,
           userData: leadData,
           needsOnboarding: !leadData.onboarding_concluido,
-          recommendedAgent: leadData.onboarding_concluido ? 'sales' : 'onboarding'
+          recommendedAgent: leadData.onboarding_concluido ? 'SALES' : 'GREETING_WITHOUT_MEMORY'
         };
       }
 
@@ -129,7 +129,7 @@ class SupabaseUserService {
         onboardingCompleted: false,
         userData: newLead,
         needsOnboarding: true,
-        recommendedAgent: 'onboarding'
+        recommendedAgent: 'GREETING_WITHOUT_MEMORY'
       };
 
     } catch (error) {
@@ -146,7 +146,7 @@ class SupabaseUserService {
         onboardingCompleted: false,
         userData: null,
         needsOnboarding: true,
-        recommendedAgent: 'onboarding'
+        recommendedAgent: 'GREETING_WITHOUT_MEMORY'
       };
     }
   }
@@ -217,8 +217,7 @@ class SupabaseUserService {
       const { data, error } = await this.supabase
         .from('agents')
         .select('*')
-        .eq('tipo', tipo)
-        .eq('ativo', true)
+        .eq('identifier', tipo)
         .single();
 
       if (error) {
@@ -226,7 +225,7 @@ class SupabaseUserService {
         return null;
       }
 
-      logger.info('Agent found by type', { agentId: data.id, tipo, nome: data.nome });
+      logger.info('Agent found by type', { agentId: data.id, tipo, name: data.name });
       return data;
 
     } catch (error) {
