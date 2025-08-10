@@ -1,6 +1,7 @@
 import os
 import re
 import time
+import sys
 import requests
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
@@ -10,6 +11,10 @@ from typing import List, Optional, Dict
 import redis
 from dotenv import load_dotenv
 from supabase import create_client, Client
+
+# Force stdout to be unbuffered for Docker logs
+sys.stdout.reconfigure(line_buffering=True)
+sys.stderr.reconfigure(line_buffering=True)
 
 load_dotenv()
 
@@ -888,4 +893,13 @@ async def get_agents_config():
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    print("🚀 Iniciando Aleen AI Python Service...")
+    print(f"🌐 Servidor rodando em: http://0.0.0.0:8000")
+    print(f"📋 Health check: http://0.0.0.0:8000/health")
+    uvicorn.run(
+        app, 
+        host="0.0.0.0", 
+        port=8000,
+        log_level="info",
+        access_log=True
+    )
