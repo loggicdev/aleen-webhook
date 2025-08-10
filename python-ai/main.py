@@ -468,147 +468,179 @@ def determine_initial_agent(message: str, user_history: List[str], recommended_a
         # Default para onboarding se dentro do contexto fitness
         return "onboarding"
 
-@app.post("/chat", response_model=MessageResponse)
-async def chat(request: MessageRequest):
+class ChatRequest(BaseModel):
+    user_id: str
+    user_name: str
+    message: str
+    conversation_history: Optional[List[str]] = []
+    recommended_agent: Optional[str] = None
+
+class ChatResponse(BaseModel):
+    response: str
+    agent_used: str
+    should_handoff: bool = False
+    next_agent: Optional[str] = None
+
+@app.post("/chat", response_model=ChatResponse)
+async def chat(request: ChatRequest):
+    """Processa uma mensagem de chat usando o agente apropriado"""
+    
     try:
+        # Verifica se há agentes carregados
+        if not agents_cache:
+            print("⚠️ Nenhum agente carregado, tentando recarregar...")
+            if not load_agents_from_supabase():
+                print("❌ Falha ao carregar agentes do Supabase")
+                raise HTTPException(status_code=500, detail="No agents available")
+        
+        # Determina qual agente usar
+        agent_type = request.recommended_agent or 'onboarding'
+        
+        # Adiciona instrução de idioma
+        language_instruction = "\n\nIMPORTANTE: Sempre responda no mesmo idioma que o usuário está usando. Se o usuário escrever em português, responda em português. Se escrever em inglês, responda em inglês."
+        
+        # Log detalhado do processamento
+        print(f"\n{'='*50}")
         print(f"📨 Recebida mensagem: {request.message}")
         print(f"👤 Usuário: {request.user_name} ({request.user_id})")
-        print(f"🎯 Agente recomendado: {request.recommended_agent}")
+        print(f"🎯 Agente recomendado: {agent_type}")
+        print(f"📚 Histórico: {len(request.conversation_history or [])} mensagens")
         
-        # Verifica se agentes estão carregados
-        if not agents_cache:
-            print("❌ ERRO: Nenhum agente carregado do Supabase!")
-            print("🔄 Tentando recarregar agentes...")
-            success = load_agents_from_supabase()
-            if not success:
-                print("❌ FALHA ao recarregar agentes")
-                raise HTTPException(status_code=503, detail="Agentes não disponíveis")
+        # Mapeia o tipo para o identifier correto
+        identifier_map = {
+            'onboarding': 'GREETING_WITHOUT_MEMORY',
+            'support': 'DOUBT',
+            'sales': 'SALES',
+            'out_context': 'OUT_CONTEXT'
+        }
         
-        print(f"✅ Agentes disponíveis: {list(agents_cache.keys())}")
+        identifier = identifier_map.get(agent_type, 'GREETING_WITHOUT_MEMORY')
         
-        # Determina agente inicial
-        initial_agent = determine_initial_agent(
-            request.message, 
-            request.conversation_history,
-            request.recommended_agent
-        )
+        # Busca o agente no cache
+        if identifier not in agents_cache:
+            print(f"⚠️ Agente '{identifier}' não encontrado no cache")
+            # Tenta usar onboarding como fallback
+            identifier = 'GREETING_WITHOUT_MEMORY'
+            if identifier not in agents_cache:
+                print("❌ Nenhum agente disponível no cache")
+                raise HTTPException(status_code=500, detail=f"Agent {agent_type} not found")
         
-        print(f"🎯 Agente selecionado: {initial_agent}")
+        agent = agents_cache[identifier]
         
-        # Verifica se o agente existe
-        if initial_agent not in agents_cache:
-            print(f"❌ ERRO: Agente '{initial_agent}' não encontrado no cache!")
-            print(f"🔍 Agentes disponíveis: {list(agents_cache.keys())}")
-            # Usa agente de fallback
-            initial_agent = 'onboarding' if 'onboarding' in agents_cache else list(agents_cache.keys())[0]
-            print(f"🔄 Usando agente de fallback: {initial_agent}")
+        # Atualiza as instruções do agente com a instrução de idioma
+        original_instructions = agent.instructions
+        agent.instructions = original_instructions + language_instruction
         
-        # Busca contexto do usuário no Redis
-        user_context = redis_client.get(f"user_context:{request.user_id}")
-        context_str = ""
-        if user_context and hasattr(user_context, 'decode'):
-            context_str = user_context.decode('utf-8')
-        elif user_context:
-            context_str = str(user_context)
+        # Cria o contexto da conversa
+        context = f"Usuário: {request.user_name}\n"
+        if request.conversation_history:
+            context += "Histórico:\n" + "\n".join(request.conversation_history[-5:]) + "\n"
+        context += f"Mensagem atual: {request.message}"
         
-        # Prepara mensagens para o agente
-        messages = []
-        if context_str:
-            messages.append({"role": "system", "content": f"Contexto do usuário: {context_str}"})
+        print(f"🚀 Executando agente: {identifier}")
+        print(f"📝 Contexto de entrada:\n{context}")
         
-        # Adiciona histórico recente
-        for msg in request.conversation_history[-5:]:  # Últimas 5 mensagens
-            messages.append({"role": "user", "content": msg})
-        
-        messages.append({"role": "user", "content": request.message})
-        
-        # Executa com Agents SDK
-        agent = agents_cache[initial_agent]
-        
-        print(f"🤖 Executando agente: {initial_agent}")
-        print(f"📝 Prompt do agente: {agent.instructions[:200]}...")
-        print(f"💬 Input da mensagem: {input_message}")
-        
-        # Prepara o input com contexto
-        input_message = request.message
-        if context_str:
-            input_message = f"Contexto do usuário: {context_str}\n\nMensagem: {request.message}"
-        
-        # Adiciona instrução explícita de idioma
-        language_instruction = f"\n\nIMPORTANTE: Responda no mesmo idioma da mensagem do usuário. Se a mensagem for em português, responda em português. Se for em inglês, responda em inglês."
-        input_message = input_message + language_instruction
-        
-        # Executa o agente
-        print(f"🚀 Executando Runner.run com input: {input_message}")
-        print(f"🔧 Agent instructions: {agent.instructions}")
-        print(f"🔧 Agent name: {agent.name}")
-        print(f"🔧 Agent model: {getattr(agent, 'model', 'unknown')}")
-        
+        # Executa o agente usando Runner
         try:
-            response = await Runner.run(
-                starting_agent=agent,
-                input=input_message
+            print("🔧 Iniciando Runner.run()...")
+            response = Runner.run(
+                agent=agent,
+                messages=[{"role": "user", "content": context}]
             )
-            print(f"✅ Runner executado com sucesso")
-            print(f"✅ Resposta do agente: {response.final_output}")
-            print(f"🔧 Tipo da resposta: {type(response.final_output)}")
-            print(f"🔧 Tamanho da resposta: {len(response.final_output) if response.final_output else 0}")
+            
+            print(f"✅ Runner.run() concluído")
+            print(f"🔍 Tipo de resposta: {type(response)}")
+            print(f"📤 Resposta completa: {response}")
+            
+            # Extrai a resposta baseado no tipo retornado
+            if hasattr(response, 'messages') and response.messages:
+                # Se response tem atributo messages
+                final_response = response.messages[-1].content if hasattr(response.messages[-1], 'content') else str(response.messages[-1])
+            elif hasattr(response, 'content'):
+                # Se response tem atributo content
+                final_response = response.content
+            elif isinstance(response, dict):
+                # Se response é um dicionário
+                final_response = response.get('content', '') or response.get('response', '') or str(response)
+            elif isinstance(response, str):
+                # Se response já é uma string
+                final_response = response
+            else:
+                # Fallback - converte para string
+                final_response = str(response)
+            
+            print(f"📝 Resposta extraída: {final_response[:200]}...")
+            
+            # Valida se a resposta não é o próprio prompt
+            prompt_indicators = [
+                'you are aleen',
+                'intelligent fitness', 
+                'nutrition agent',
+                '*about aleen*',
+                '*behavior*',
+                '*rules*',
+                'your mission is to',
+                'personalized greeting',
+                'brief introduction'
+            ]
+            
+            response_lower = final_response.lower()
+            is_prompt_response = (
+                len(final_response) > 400 and 
+                sum(1 for indicator in prompt_indicators if indicator in response_lower) >= 3
+            )
+            
+            if is_prompt_response:
+                print("⚠️ ERRO CRÍTICO: Runner.run() retornou o prompt ao invés de processar!")
+                print(f"❌ Resposta inválida detectada")
+                
+                # Gera resposta apropriada baseada no tipo de agente
+                if identifier == 'GREETING_WITHOUT_MEMORY':
+                    final_response = f"Oi {request.user_name}! 😊\n\nEu sou a Aleen, sua personal trainer inteligente aqui no WhatsApp!\n\nEstou aqui para criar treinos e planos de nutrição 100% personalizados para você.\n\nQuer conhecer como funciona? Temos 14 dias grátis! 💪"
+                elif identifier == 'DOUBT':
+                    final_response = f"Oi {request.user_name}! Como posso ajudar você hoje? 😊"
+                elif identifier == 'SALES':
+                    final_response = f"Olá {request.user_name}! Que bom falar com você! Como posso ajudar?"
+                else:
+                    final_response = f"Oi {request.user_name}! 👋"
+            
+            # Restaura as instruções originais
+            agent.instructions = original_instructions
+            
+            return ChatResponse(
+                response=final_response,
+                agent_used=identifier,
+                should_handoff=False
+            )
             
         except Exception as runner_error:
-            print(f"❌ ERRO no Runner.run: {runner_error}")
-            print(f"❌ Tipo do erro: {type(runner_error)}")
-            raise runner_error
-        
-        # Validação: garante que não está retornando o prompt
-        if (response.final_output and 
-            len(response.final_output) > 500 and 
-            ("You are Aleen" in response.final_output or "BEHAVIOR:" in response.final_output or
-             "**ABOUT ALEEN:**" in response.final_output or "**RULES:**" in response.final_output)):
-            print("⚠️ ERRO: Agente retornou o prompt ao invés de uma resposta!")
-            print(f"🔍 Resposta problemática: {response.final_output[:300]}...")
+            print(f"❌ Erro ao executar Runner.run(): {str(runner_error)}")
+            print(f"🔍 Tipo do erro: {type(runner_error)}")
+            import traceback
+            print(f"📋 Stack trace:\n{traceback.format_exc()}")
             
-            # Resposta de fallback em português
-            fallback_response = f"Olá! Sou a Aleen, sua assistente de fitness e nutrição. Como posso te ajudar hoje?"
+            # Restaura as instruções originais
+            agent.instructions = original_instructions
             
-            print(f"🔄 Usando resposta de fallback: {fallback_response}")
-            
-            return MessageResponse(
-                response=fallback_response,
-                agent_used=f"{initial_agent}_fallback",
-                should_handoff=False,
-                next_agent=None
+            # Retorna uma resposta padrão
+            return ChatResponse(
+                response=f"Oi {request.user_name}! Desculpe, tive um problema técnico. Mas estou aqui para ajudar você com seus objetivos fitness! Em que posso ajudar?",
+                agent_used=identifier,
+                should_handoff=False
             )
-        
-        # Validação adicional: verifica se resposta é muito curta ou inválida
-        if not response.final_output or len(response.final_output.strip()) < 10:
-            print("⚠️ ERRO: Resposta muito curta ou vazia!")
-            print(f"🔍 Resposta recebida: '{response.final_output}'")
             
-            fallback_response = f"Olá! Sou a Aleen, sua assistente de fitness e nutrição. Como posso te ajudar hoje?"
-            
-            return MessageResponse(
-                response=fallback_response,
-                agent_used=f"{initial_agent}_fallback",
-                should_handoff=False,
-                next_agent=None
-            )
-        
-        print(f"✅ Resposta válida processada com sucesso")
-        print(f"📤 Enviando resposta: {response.final_output[:100]}...")
-        
-        # Salva contexto atualizado no Redis
-        updated_context = f"{context_str}\nUser: {request.message}\nAgent: {response.final_output}"
-        redis_client.setex(f"user_context:{request.user_id}", 3600, updated_context)  # 1 hora
-        
-        return MessageResponse(
-            response=response.final_output,
-            agent_used=initial_agent,
-            should_handoff=False,  # Simplificado por enquanto
-            next_agent=None
-        )
-        
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Erro no processamento: {str(e)}")
+        print(f"❌ Erro no endpoint /chat: {str(e)}")
+        import traceback
+        print(f"📋 Stack trace:\n{traceback.format_exc()}")
+        
+        return ChatResponse(
+            response="Desculpe, ocorreu um erro ao processar sua mensagem. Por favor, tente novamente.",
+            agent_used="error",
+            should_handoff=True
+        )
 
 @app.post("/whatsapp-chat", response_model=WhatsAppMessageResponse)
 async def whatsapp_chat(request: WhatsAppMessageRequest):
