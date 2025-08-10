@@ -3,22 +3,21 @@ import logger from '../utils/logger';
 
 interface Lead {
   id: string;
-  telefone: string;
-  nome?: string;
-  status?: string;
+  phone: string;
+  name?: string;
   onboarding_concluido?: boolean;
+  onboarding?: boolean;
+  user_id?: string;
   created_at: string;
   updated_at?: string;
 }
 
 interface User {
   id: string;
-  telefone: string;
-  nome?: string;
-  email?: string;
-  status?: string;
+  phone: string;
+  name?: string;
+  nickname?: string;
   created_at: string;
-  updated_at?: string;
 }
 
 interface Agent {
@@ -70,14 +69,13 @@ class SupabaseUserService {
       const { data: userData, error: userError } = await this.supabase
         .from('users')
         .select('*')
-        .eq('telefone', cleanPhone)
+        .eq('phone', cleanPhone)
         .single();
 
       if (userData && !userError) {
         logger.info('User found in users table', { 
           userId: userData.id,
-          nome: userData.nome,
-          status: userData.status
+          name: userData.name
         });
 
         return {
@@ -95,13 +93,13 @@ class SupabaseUserService {
       const { data: leadData, error: leadError } = await this.supabase
         .from('leads')
         .select('*')
-        .eq('telefone', cleanPhone)
+        .eq('phone', cleanPhone)
         .single();
 
       if (leadData && !leadError) {
         logger.info('Lead found in leads table', { 
           leadId: leadData.id,
-          nome: leadData.nome,
+          name: leadData.name,
           onboarding_concluido: leadData.onboarding_concluido
         });
 
@@ -159,8 +157,7 @@ class SupabaseUserService {
       const { data, error } = await this.supabase
         .from('leads')
         .insert({
-          telefone,
-          status: 'novo',
+          phone: telefone,
           onboarding_concluido: false
         })
         .select()
@@ -260,7 +257,7 @@ class SupabaseUserService {
           onboarding_concluido: true,
           updated_at: new Date().toISOString()
         })
-        .eq('telefone', cleanPhone);
+        .eq('phone', cleanPhone);
 
       if (error) {
         logger.error('Error completing onboarding', { error: error.message, telefone });
