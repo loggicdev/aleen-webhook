@@ -3,8 +3,6 @@ version: '3.8'
 services:
   aleen-ia:
     build: .
-    ports:
-      - "3000:3000"
     environment:
       - NODE_ENV=${NODE_ENV:-production}
       - PORT=3000
@@ -37,8 +35,6 @@ services:
     build: 
       context: .
       dockerfile: Dockerfile.python
-    ports:
-      - "8000:8000"
     environment:
       - REDIS_URL=redis://redis:6379
       - OPENAI_API_KEY=${OPENAI_API_KEY}
@@ -60,8 +56,6 @@ services:
 
   redis:
     image: redis:7-alpine
-    ports:
-      - "6379:6379"
     volumes:
       - redis_data:/data
     restart: unless-stopped
