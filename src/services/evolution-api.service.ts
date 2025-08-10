@@ -17,6 +17,7 @@ interface SendTextMessageResponse {
   success: boolean;
   messageId?: string;
   error?: string;
+  data?: any;
 }
 
 class EvolutionApiService {
@@ -38,22 +39,51 @@ class EvolutionApiService {
     }
   }
 
-  /**
-   * Envia mensagem de texto via Evolution API
-   */
-  async sendTextMessage(
-    phoneNumber: string, 
+  private cleanPhoneNumber(phone: string): string {
+    return phone.replace(/[^\d]/g, '');
+  }
+
+  private splitLongMessage(text: string, maxLength: number = 1000): string[] {
+    if (text.length <= maxLength) {
+      return [text];
+    }
+
+    const messages: string[] = [];
+    let currentMessage = '';
+    const sentences = text.split(/(?<=[.!?])\s+/);
+
+    for (const sentence of sentences) {
+      if ((currentMessage + sentence).length <= maxLength) {
+        currentMessage += (currentMessage ? ' ' : '') + sentence;
+      } else {
+        if (currentMessage) {
+          messages.push(currentMessage.trim());
+          currentMessage = sentence;
+        } else {
+          for (let i = 0; i < sentence.length; i += maxLength) {
+            messages.push(sentence.substring(i, i + maxLength));
+          }
+        }
+      }
+    }
+
+    if (currentMessage) {
+      messages.push(currentMessage.trim());
+    }
+
+    return messages;
+  }
+
+  private async sendSingleMessage(
+    cleanNumber: string,
     text: string,
     options: {
       delay?: number;
       presence?: 'composing' | 'recording' | 'paused';
       linkPreview?: boolean;
-    } = {}
+    }
   ): Promise<SendTextMessageResponse> {
     try {
-      // Limpa o número removendo caracteres especiais
-      const cleanNumber = this.cleanPhoneNumber(phoneNumber);
-      
       const payload: SendTextMessageRequest = {
         number: cleanNumber,
         textMessage: {
@@ -80,33 +110,96 @@ class EvolutionApiService {
           'Content-Type': 'application/json',
           'apikey': this.apiKey
         },
-        timeout: 30000 // 30 segundos
+        timeout: 30000
       });
 
       if (response.status === 200 || response.status === 201) {
         logger.info('WhatsApp message sent successfully', {
           number: cleanNumber,
-          messageId: response.data?.key?.id || 'unknown',
+          textLength: text.length,
           status: response.status
         });
 
         return {
           success: true,
-          messageId: response.data?.key?.id
+          data: response.data
         };
       } else {
         logger.error('Evolution API returned non-success status', {
           status: response.status,
+          statusText: response.statusText,
           data: response.data,
           number: cleanNumber
         });
 
         return {
           success: false,
-          error: `API returned status ${response.status}`
+          error: `HTTP ${response.status}: ${response.statusText}`
         };
       }
+    } catch (error) {
+      logger.error('Error in sendSingleMessage', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+        number: cleanNumber,
+        textLength: text.length
+      });
 
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      };
+    }
+  }
+
+  async sendTextMessage(
+    phoneNumber: string, 
+    text: string,
+    options: {
+      delay?: number;
+      presence?: 'composing' | 'recording' | 'paused';
+      linkPreview?: boolean;
+    } = {}
+  ): Promise<SendTextMessageResponse> {
+    try {
+      const cleanNumber = this.cleanPhoneNumber(phoneNumber);
+      const messages = this.splitLongMessage(text, 1000);
+      
+      if (messages.length === 1) {
+        return await this.sendSingleMessage(cleanNumber, text, options);
+      } else {
+        logger.info('Splitting long message', {
+          originalLength: text.length,
+          parts: messages.length,
+          number: cleanNumber
+        });
+
+        let lastResponse: SendTextMessageResponse = { success: false };
+        
+        for (let i = 0; i < messages.length; i++) {
+          const messageText = messages[i];
+          const partOptions = {
+            ...options,
+            delay: options.delay || 2000 + (i * 1000)
+          };
+          
+          lastResponse = await this.sendSingleMessage(cleanNumber, messageText, partOptions);
+          
+          if (!lastResponse.success) {
+            logger.error('Failed to send message part', {
+              part: i + 1,
+              total: messages.length,
+              number: cleanNumber
+            });
+            break;
+          }
+          
+          if (i < messages.length - 1) {
+            await new Promise(resolve => setTimeout(resolve, 1500));
+          }
+        }
+        
+        return lastResponse;
+      }
     } catch (error) {
       logger.error('Error sending WhatsApp message', {
         error: error instanceof Error ? error.message : 'Unknown error',
@@ -121,20 +214,16 @@ class EvolutionApiService {
     }
   }
 
-  /**
-   * Envia mensagem de saudação inicial
-   */
   async sendWelcomeMessage(phoneNumber: string, userName: string = ''): Promise<SendTextMessageResponse> {
     const welcomeText = `Olá${userName ? ` ${userName}` : ''}! 👋
 
-Seja bem-vindo(a) à *Aleen IA*! 🤖✨
+Eu sou a Aleen, sua assistente inteligente de fitness e nutrição! 🏋️‍♀️
 
-Sou sua assistente inteligente e estou aqui para te ajudar com automação de atendimento e soluções de IA para seu negócio.
-
-Para começarmos, me conte um pouco sobre você:
-• Qual o nome da sua empresa?
-• Em que ramo vocês atuam?
-• Qual o principal desafio que vocês enfrentam hoje?
+Estou aqui para te ajudar a:
+• Criar treinos personalizados ��
+• Planejar sua alimentação 🥗
+• Acompanhar seu progresso 📊
+• Tirar dúvidas sobre saúde 💡
 
 Vamos conversar e descobrir como posso te ajudar! 😊`;
 
@@ -144,11 +233,8 @@ Vamos conversar e descobrir como posso te ajudar! 😊`;
     });
   }
 
-  /**
-   * Envia mensagem personalizada baseada no agente
-   */
   async sendAgentMessage(
-    phoneNumber: string, 
+    phoneNumber: string,
     agentResponse: string,
     agentType: string = 'onboarding'
   ): Promise<SendTextMessageResponse> {
@@ -160,61 +246,35 @@ Vamos conversar e descobrir como posso te ajudar! 😊`;
     });
   }
 
-  /**
-   * Calcula delay baseado no tamanho da mensagem (simula digitação)
-   */
   private calculateTypingDelay(text: string): number {
-    // Aproximadamente 200 caracteres por minuto = 3.33 chars/segundo
-    const charsPerSecond = 3.33;
-    const baseDelay = 1000; // 1 segundo mínimo
-    const calculatedDelay = (text.length / charsPerSecond) * 1000;
+    const baseDelay = 1000;
+    const charDelay = text.length * 30;
+    const maxDelay = 10000;
     
-    // Máximo de 10 segundos
-    return Math.min(Math.max(baseDelay, calculatedDelay), 10000);
+    return Math.min(baseDelay + charDelay, maxDelay);
   }
 
-  /**
-   * Limpa número de telefone para formato correto
-   */
-  private cleanPhoneNumber(phoneNumber: string): string {
-    // Remove @s.whatsapp.net e caracteres especiais
-    let cleaned = phoneNumber
-      .replace('@s.whatsapp.net', '')
-      .replace(/[^\d]/g, '');
-
-    // Se não começar com 55 (Brasil), adiciona
-    if (!cleaned.startsWith('55') && cleaned.length >= 10) {
-      cleaned = '55' + cleaned;
-    }
-
-    return cleaned;
-  }
-
-  /**
-   * Verifica se a API Evolution está disponível
-   */
-  async checkHealth(): Promise<boolean> {
+  async healthCheck(): Promise<boolean> {
     try {
-      const response = await axios.get(`${this.baseUrl}/instance/connectionState/${this.instance}`, {
+      const url = `${this.baseUrl}/instance/connect/${this.instance}`;
+      
+      const response = await axios.get(url, {
         headers: {
           'apikey': this.apiKey
         },
-        timeout: 5000
+        timeout: 10000
       });
 
-      const isConnected = response.data?.instance?.state === 'open';
-      
       logger.info('Evolution API health check', {
-        available: response.status === 200,
-        connected: isConnected,
-        state: response.data?.instance?.state
+        status: response.status,
+        instance: this.instance
       });
 
-      return response.status === 200 && isConnected;
-
+      return response.status === 200;
     } catch (error) {
       logger.error('Evolution API health check failed', {
-        error: error instanceof Error ? error.message : 'Unknown error'
+        error: error instanceof Error ? error.message : 'Unknown error',
+        instance: this.instance
       });
       return false;
     }
