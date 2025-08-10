@@ -404,7 +404,7 @@ def determine_initial_agent(message: str, user_history: List[str], recommended_a
     """Determina qual agente deve atender baseado na mensagem, histórico e recomendação"""
     
     # Se há uma recomendação específica, usa ela
-    if recommended_agent and recommended_agent in agents:
+    if recommended_agent and recommended_agent in agents_cache:
         return recommended_agent
     
     # Palavras-chave claramente fora de contexto (não relacionadas a fitness)
@@ -506,7 +506,7 @@ async def chat(request: ChatRequest):
         print(f"🎯 Agente recomendado: {agent_type}")
         print(f"📚 Histórico: {len(request.conversation_history or [])} mensagens")
         
-        # Mapeia o tipo para o identifier correto
+        # Mapeia o tipo para o identifier correto (apenas para logs)
         identifier_map = {
             'onboarding': 'GREETING_WITHOUT_MEMORY',
             'support': 'DOUBT',
@@ -516,16 +516,16 @@ async def chat(request: ChatRequest):
         
         identifier = identifier_map.get(agent_type, 'GREETING_WITHOUT_MEMORY')
         
-        # Busca o agente no cache
-        if identifier not in agents_cache:
-            print(f"⚠️ Agente '{identifier}' não encontrado no cache")
+        # Busca o agente no cache usando o agent_type (não o identifier)
+        if agent_type not in agents_cache:
+            print(f"⚠️ Agente '{agent_type}' não encontrado no cache")
             # Tenta usar onboarding como fallback
-            identifier = 'GREETING_WITHOUT_MEMORY'
-            if identifier not in agents_cache:
+            agent_type = 'onboarding'
+            if agent_type not in agents_cache:
                 print("❌ Nenhum agente disponível no cache")
                 raise HTTPException(status_code=500, detail=f"Agent {agent_type} not found")
         
-        agent = agents_cache[identifier]
+        agent = agents_cache[agent_type]
         
         # Atualiza as instruções do agente com a instrução de idioma
         original_instructions = agent.instructions
@@ -537,37 +537,37 @@ async def chat(request: ChatRequest):
             context += "Histórico:\n" + "\n".join(request.conversation_history[-5:]) + "\n"
         context += f"Mensagem atual: {request.message}"
         
-        print(f"🚀 Executando agente: {identifier}")
+        print(f"🚀 Executando agente: {agent_type} ({identifier})")
         print(f"📝 Contexto de entrada:\n{context}")
         
-        # Executa o agente usando Runner
+        # Executa o agente usando OpenAI diretamente
         try:
-            print("🔧 Iniciando Runner.run()...")
-            response = Runner.run(
-                agent=agent,
-                messages=[{"role": "user", "content": context}]
+            print("🔧 Iniciando processamento com OpenAI...")
+            
+            # Cria as mensagens para o OpenAI
+            messages = [
+                {"role": "system", "content": agent.instructions},
+                {"role": "user", "content": context}
+            ]
+            
+            print(f"📝 Mensagens para OpenAI:")
+            print(f"   System: {agent.instructions[:100]}...")
+            print(f"   User: {context}")
+            
+            # Chama OpenAI diretamente
+            response = openai_client.chat.completions.create(
+                model="gpt-4",
+                messages=messages,
+                max_tokens=1000,
+                temperature=0.7
             )
             
-            print(f"✅ Runner.run() concluído")
-            print(f"🔍 Tipo de resposta: {type(response)}")
-            print(f"📤 Resposta completa: {response}")
+            print(f"✅ OpenAI response recebido")
             
-            # Extrai a resposta baseado no tipo retornado
-            if hasattr(response, 'messages') and response.messages:
-                # Se response tem atributo messages
-                final_response = response.messages[-1].content if hasattr(response.messages[-1], 'content') else str(response.messages[-1])
-            elif hasattr(response, 'content'):
-                # Se response tem atributo content
-                final_response = response.content
-            elif isinstance(response, dict):
-                # Se response é um dicionário
-                final_response = response.get('content', '') or response.get('response', '') or str(response)
-            elif isinstance(response, str):
-                # Se response já é uma string
-                final_response = response
-            else:
-                # Fallback - converte para string
-                final_response = str(response)
+            # Extrai a resposta
+            final_response = response.choices[0].message.content
+            
+            print(f"📝 Resposta extraída: {final_response[:200]}...")
             
             print(f"📝 Resposta extraída: {final_response[:200]}...")
             
@@ -595,11 +595,11 @@ async def chat(request: ChatRequest):
                 print(f"❌ Resposta inválida detectada")
                 
                 # Gera resposta apropriada baseada no tipo de agente
-                if identifier == 'GREETING_WITHOUT_MEMORY':
+                if agent_type == 'onboarding':
                     final_response = f"Oi {request.user_name}! 😊\n\nEu sou a Aleen, sua personal trainer inteligente aqui no WhatsApp!\n\nEstou aqui para criar treinos e planos de nutrição 100% personalizados para você.\n\nQuer conhecer como funciona? Temos 14 dias grátis! 💪"
-                elif identifier == 'DOUBT':
+                elif agent_type == 'support':
                     final_response = f"Oi {request.user_name}! Como posso ajudar você hoje? 😊"
-                elif identifier == 'SALES':
+                elif agent_type == 'sales':
                     final_response = f"Olá {request.user_name}! Que bom falar com você! Como posso ajudar?"
                 else:
                     final_response = f"Oi {request.user_name}! 👋"
@@ -609,13 +609,13 @@ async def chat(request: ChatRequest):
             
             return ChatResponse(
                 response=final_response,
-                agent_used=identifier,
+                agent_used=agent_type,
                 should_handoff=False
             )
             
-        except Exception as runner_error:
-            print(f"❌ Erro ao executar Runner.run(): {str(runner_error)}")
-            print(f"🔍 Tipo do erro: {type(runner_error)}")
+        except Exception as openai_error:
+            print(f"❌ Erro ao executar OpenAI: {str(openai_error)}")
+            print(f"🔍 Tipo do erro: {type(openai_error)}")
             import traceback
             print(f"📋 Stack trace:\n{traceback.format_exc()}")
             
@@ -625,7 +625,7 @@ async def chat(request: ChatRequest):
             # Retorna uma resposta padrão
             return ChatResponse(
                 response=f"Oi {request.user_name}! Desculpe, tive um problema técnico. Mas estou aqui para ajudar você com seus objetivos fitness! Em que posso ajudar?",
-                agent_used=identifier,
+                agent_used=agent_type,
                 should_handoff=False
             )
             
@@ -648,7 +648,7 @@ async def whatsapp_chat(request: WhatsAppMessageRequest):
     Processa mensagem e envia resposta automaticamente via WhatsApp
     """
     try:
-        if not agents:
+        if not agents_cache:
             raise HTTPException(status_code=503, detail="Agentes não carregados")
         
         # Determina agente inicial
@@ -658,7 +658,7 @@ async def whatsapp_chat(request: WhatsAppMessageRequest):
             recommended_agent=request.recommended_agent
         )
         
-        if initial_agent not in agents:
+        if initial_agent not in agents_cache:
             initial_agent = "support"  # fallback
         
         # Recupera contexto do Redis
@@ -677,14 +677,40 @@ async def whatsapp_chat(request: WhatsAppMessageRequest):
         
         print(f"🤖 Processando mensagem WhatsApp para usuário {request.user_name} ({request.phone_number}) com agente {initial_agent}")
         
-        # Executa agente
-        response = await Runner.run(
-            starting_agent=agents[initial_agent],
-            input=full_context  # Enviar como string simples
-        )
+        # Busca o agente no cache
+        agent = agents_cache.get(initial_agent)
+        if not agent:
+            print(f"⚠️ Agente '{initial_agent}' não encontrado, usando onboarding")
+            agent = agents_cache.get('onboarding')
+            if not agent:
+                raise HTTPException(status_code=500, detail="Nenhum agente disponível")
+        
+        # Adiciona instrução de idioma
+        language_instruction = "\n\nIMPORTANTE: Sempre responda no mesmo idioma que o usuário está usando. Se o usuário escrever em português, responda em português. Se escrever em inglês, responda em inglês."
+        
+        # Cria mensagens para OpenAI
+        messages = [
+            {"role": "system", "content": agent.instructions + language_instruction},
+            {"role": "user", "content": f"Usuário: {request.user_name}\nMensagem: {request.message}"}
+        ]
+        
+        # Executa com OpenAI
+        try:
+            response = openai_client.chat.completions.create(
+                model="gpt-4",
+                messages=messages,
+                max_tokens=1000,
+                temperature=0.7
+            )
+            
+            ai_response = response.choices[0].message.content
+            
+        except Exception as e:
+            print(f"❌ Erro ao chamar OpenAI: {e}")
+            ai_response = f"Oi {request.user_name}! Desculpe, tive um problema técnico. Como posso ajudar você hoje?"
         
         # Salva contexto atualizado no Redis
-        updated_context = f"{context_str}\nUser: {request.message}\nAgent: {response.final_output}"
+        updated_context = f"{context_str}\nUser: {request.message}\nAgent: {ai_response}"
         redis_client.setex(f"user_context:{request.user_id}", 3600, updated_context)  # 1 hora
         
         # Envia resposta via WhatsApp se solicitado
@@ -693,11 +719,11 @@ async def whatsapp_chat(request: WhatsAppMessageRequest):
         
         if request.send_to_whatsapp:
             try:
-                messages = evolution_service.split_message(response.final_output)
+                messages = evolution_service.split_message(ai_response)
                 messages_sent = len(messages)
                 whatsapp_sent = evolution_service.send_text_message(
                     phone_number=request.phone_number,
-                    text=response.final_output,
+                    text=ai_response,
                     delay=1500  # 1.5s delay entre mensagens
                 )
                 
@@ -711,7 +737,7 @@ async def whatsapp_chat(request: WhatsAppMessageRequest):
                 whatsapp_sent = False
         
         return WhatsAppMessageResponse(
-            response=response.final_output,
+            response=ai_response,
             agent_used=initial_agent,
             should_handoff=False,
             next_agent=None,
@@ -748,7 +774,7 @@ async def health_check():
 @app.get("/agents")
 async def list_agents():
     return {
-        "agents": list(agents.keys()),
+        "agents": list(agents_cache.keys()),
         "details": {
             agent_type: {
                 "name": config.get("name", "Unknown"),
@@ -765,15 +791,15 @@ async def reload_agents():
     try:
         success = load_agents_from_supabase()
         if success:
-            # Atualiza a referência global
+            # Atualiza a referência global (mantido para compatibilidade)
             global agents
             agents = agents_cache
             
             return {
                 "success": True,
                 "message": f"Agentes recarregados com sucesso",
-                "agents_loaded": list(agents.keys()),
-                "total": len(agents)
+                "agents_loaded": list(agents_cache.keys()),
+                "total": len(agents_cache)
             }
         else:
             return {
