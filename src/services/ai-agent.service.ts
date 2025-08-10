@@ -75,12 +75,29 @@ class AiAgentService {
         status: response.status,
         statusText: response.statusText,
         responseData: {
-          response: response.data.response ? response.data.response.substring(0, 200) + '...' : 'undefined',
+          response: response.data.response ? `"${response.data.response.substring(0, 200)}..."` : 'UNDEFINED_RESPONSE',
+          responseType: typeof response.data.response,
+          responseLength: response.data.response ? response.data.response.length : 0,
           agent_used: response.data.agent_used,
           should_handoff: response.data.should_handoff,
-          next_agent: response.data.next_agent
+          next_agent: response.data.next_agent,
+          fullData: JSON.stringify(response.data)
         }
       });
+
+      // Validação da resposta
+      if (!response.data.response || response.data.response === 'undefined') {
+        logger.error('Python AI returned undefined or invalid response', {
+          responseData: response.data,
+          fullResponse: JSON.stringify(response.data)
+        });
+        
+        return {
+          response: 'Olá! Sou a Aleen IA. No momento estou com dificuldades técnicas, mas em breve poderei te ajudar melhor. Como posso te ajudar hoje?',
+          agent_used: 'fallback',
+          should_handoff: false
+        };
+      }
 
       return response.data;
     } catch (error) {

@@ -326,10 +326,18 @@ Vamos conversar e descobrir como posso te ajudar! 😊`;
                 }
               }
             } catch (aiError) {
-              logger.warn('AI processing failed, continuing with aggregated message', {
+              logger.error('AI processing failed', {
                 redisKey,
-                error: aiError instanceof Error ? aiError.message : 'Unknown AI error'
+                error: aiError instanceof Error ? aiError.message : 'Unknown AI error',
+                stack: aiError instanceof Error ? aiError.stack : undefined
               });
+              
+              // Define uma resposta de fallback quando AI falha
+              aiResponse = {
+                response: 'Desculpe, estou com dificuldades técnicas no momento. Pode repetir sua mensagem?',
+                agent_used: 'fallback',
+                should_handoff: false
+              };
             }
 
             // 9. Limpa Redis

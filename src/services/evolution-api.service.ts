@@ -84,15 +84,11 @@ class EvolutionApiService {
     }
   ): Promise<SendTextMessageResponse> {
     try {
-      const payload: SendTextMessageRequest = {
+      // Estrutura simplificada que funciona com Evolution API
+      const payload = {
         number: cleanNumber,
         textMessage: {
-          text
-        },
-        options: {
-          delay: options.delay || 1000,
-          presence: options.presence || 'composing',
-          linkPreview: options.linkPreview || false
+          text: text
         }
       };
 
@@ -102,7 +98,8 @@ class EvolutionApiService {
         url,
         number: cleanNumber,
         textLength: text.length,
-        instance: this.instance
+        instance: this.instance,
+        payload: JSON.stringify(payload)
       });
 
       const response = await axios.post(url, payload, {
@@ -117,7 +114,8 @@ class EvolutionApiService {
         logger.info('WhatsApp message sent successfully', {
           number: cleanNumber,
           textLength: text.length,
-          status: response.status
+          status: response.status,
+          responseData: response.data
         });
 
         return {
@@ -141,7 +139,9 @@ class EvolutionApiService {
       logger.error('Error in sendSingleMessage', {
         error: error instanceof Error ? error.message : 'Unknown error',
         number: cleanNumber,
-        textLength: text.length
+        textLength: text.length,
+        responseStatus: error && typeof error === 'object' && 'response' in error ? (error.response as any)?.status : undefined,
+        responseData: error && typeof error === 'object' && 'response' in error ? (error.response as any)?.data : undefined
       });
 
       return {
