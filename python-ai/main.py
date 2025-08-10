@@ -571,38 +571,8 @@ async def chat(request: ChatRequest):
             
             print(f"📝 Resposta extraída: {final_response[:200]}...")
             
-            # Valida se a resposta não é o próprio prompt
-            prompt_indicators = [
-                'you are aleen',
-                'intelligent fitness', 
-                'nutrition agent',
-                '*about aleen*',
-                '*behavior*',
-                '*rules*',
-                'your mission is to',
-                'personalized greeting',
-                'brief introduction'
-            ]
-            
-            response_lower = final_response.lower()
-            is_prompt_response = (
-                len(final_response) > 400 and 
-                sum(1 for indicator in prompt_indicators if indicator in response_lower) >= 3
-            )
-            
-            if is_prompt_response:
-                print("⚠️ ERRO CRÍTICO: Runner.run() retornou o prompt ao invés de processar!")
-                print(f"❌ Resposta inválida detectada")
-                
-                # Gera resposta apropriada baseada no tipo de agente
-                if agent_type == 'onboarding':
-                    final_response = f"Oi {request.user_name}! 😊\n\nEu sou a Aleen, sua personal trainer inteligente aqui no WhatsApp!\n\nEstou aqui para criar treinos e planos de nutrição 100% personalizados para você.\n\nQuer conhecer como funciona? Temos 14 dias grátis! 💪"
-                elif agent_type == 'support':
-                    final_response = f"Oi {request.user_name}! Como posso ajudar você hoje? 😊"
-                elif agent_type == 'sales':
-                    final_response = f"Olá {request.user_name}! Que bom falar com você! Como posso ajudar?"
-                else:
-                    final_response = f"Oi {request.user_name}! 👋"
+            # Remove a validação de prompt - sempre usa a resposta da IA
+            print("� Usando resposta direta da IA sem validação de prompt")
             
             # Restaura as instruções originais
             agent.instructions = original_instructions
@@ -622,12 +592,28 @@ async def chat(request: ChatRequest):
             # Restaura as instruções originais
             agent.instructions = original_instructions
             
-            # Retorna uma resposta padrão
-            return ChatResponse(
-                response=f"Oi {request.user_name}! Desculpe, tive um problema técnico. Mas estou aqui para ajudar você com seus objetivos fitness! Em que posso ajudar?",
-                agent_used=agent_type,
-                should_handoff=False
-            )
+            # Em caso de erro, tenta uma resposta simples da IA
+            try:
+                simple_messages = [
+                    {"role": "system", "content": "You are Aleen, a fitness AI assistant. Respond naturally in the user's language."},
+                    {"role": "user", "content": f"User {request.user_name} sent a message but there was a technical issue. Please respond politely acknowledging the technical problem and ask how you can help them with fitness."}
+                ]
+                
+                fallback_response = openai_client.chat.completions.create(
+                    model="gpt-4",
+                    messages=simple_messages,
+                    max_tokens=200,
+                    temperature=0.5
+                )
+                
+                return ChatResponse(
+                    response=fallback_response.choices[0].message.content,
+                    agent_used=agent_type,
+                    should_handoff=False
+                )
+            except:
+                # Se tudo falhar, retorna erro HTTP
+                raise HTTPException(status_code=500, detail="AI service temporarily unavailable")
             
     except HTTPException:
         raise
@@ -636,11 +622,28 @@ async def chat(request: ChatRequest):
         import traceback
         print(f"📋 Stack trace:\n{traceback.format_exc()}")
         
-        return ChatResponse(
-            response="Desculpe, ocorreu um erro ao processar sua mensagem. Por favor, tente novamente.",
-            agent_used="error",
-            should_handoff=True
-        )
+        # Tenta uma resposta de erro gerada pela IA
+        try:
+            error_messages = [
+                {"role": "system", "content": "You are Aleen, a fitness AI assistant. Respond naturally in the user's language."},
+                {"role": "user", "content": "There was a system error. Please apologize for the technical issue and ask the user to try again, but keep it brief and friendly."}
+            ]
+            
+            error_response = openai_client.chat.completions.create(
+                model="gpt-4",
+                messages=error_messages,
+                max_tokens=100,
+                temperature=0.3
+            )
+            
+            return ChatResponse(
+                response=error_response.choices[0].message.content,
+                agent_used="error",
+                should_handoff=True
+            )
+        except:
+            # Se tudo falhar, retorna erro HTTP
+            raise HTTPException(status_code=500, detail="Service temporarily unavailable")
 
 @app.post("/whatsapp-chat", response_model=WhatsAppMessageResponse)
 async def whatsapp_chat(request: WhatsAppMessageRequest):
@@ -707,7 +710,24 @@ async def whatsapp_chat(request: WhatsAppMessageRequest):
             
         except Exception as e:
             print(f"❌ Erro ao chamar OpenAI: {e}")
-            ai_response = f"Oi {request.user_name}! Desculpe, tive um problema técnico. Como posso ajudar você hoje?"
+            # Tenta uma resposta de fallback simples da IA
+            try:
+                fallback_messages = [
+                    {"role": "system", "content": "You are Aleen, a fitness AI assistant. Respond naturally in the user's language."},
+                    {"role": "user", "content": f"User {request.user_name} sent a message but there was a technical issue. Acknowledge the problem politely and ask how you can help with fitness."}
+                ]
+                
+                fallback_response = openai_client.chat.completions.create(
+                    model="gpt-4",
+                    messages=fallback_messages,
+                    max_tokens=200,
+                    temperature=0.5
+                )
+                
+                ai_response = fallback_response.choices[0].message.content
+            except:
+                # Se tudo falhar, usa erro genérico
+                raise HTTPException(status_code=500, detail="AI service temporarily unavailable")
         
         # Salva contexto atualizado no Redis
         updated_context = f"{context_str}\nUser: {request.message}\nAgent: {ai_response}"

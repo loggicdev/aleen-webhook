@@ -215,52 +215,6 @@ export class RedisMessageService {
                   recommendedAgent: userStatus.recommendedAgent
                 });
 
-                // REMOVIDO: hardcode para primeira mensagem - agora sempre usa IA
-                if (false) { // userStatus.isFirstMessage || userStatus.needsOnboarding
-                  
-                  // Em vez de usar o prompt (que é para a IA), criamos uma mensagem de boas-vindas
-                  const welcomeMessage = `Oi${userData.userName ? ` ${userData.userName}` : ''}! �
-
-Eu sou a Aleen, sua personal trainer inteligente aqui no WhatsApp!
-
-Estou aqui para criar treinos e planos de nutrição 100% personalizados para você.
-
-Quer conhecer como funciona? Temos 14 dias grátis! �`;
-
-                  // Envia mensagem via Evolution API
-                  const sendResult = await evolutionApiService.sendTextMessage(
-                    userData.userNumber,
-                    welcomeMessage
-                  );
-
-                  if (sendResult.success) {
-                    logger.info('Welcome message sent successfully', {
-                      userNumber: userData.userNumber,
-                      messageId: sendResult.messageId,
-                      isFirstMessage: userStatus.isFirstMessage
-                    });
-                  } else {
-                    logger.error('Failed to send welcome message', {
-                      userNumber: userData.userNumber,
-                      error: sendResult.error
-                    });
-                  }
-
-                  // 7. Limpa Redis
-                  await this.clearMessages(redisKey);
-
-                  // Resolve sem processar IA (já enviou resposta)
-                  this.resolveAllPending(redisKey, {
-                    shouldProceed: true,
-                    aggregatedMessage,
-                    userStatus,
-                    welcomeMessageSent: sendResult.success,
-                    skipAI: true
-                  });
-
-                  return;
-                }
-
               } catch (userError) {
                 logger.warn('Failed to check user status, continuing with AI processing', {
                   redisKey,
@@ -317,12 +271,8 @@ Quer conhecer como funciona? Temos 14 dias grátis! �`;
                 stack: aiError instanceof Error ? aiError.stack : undefined
               });
               
-              // Define uma resposta de fallback quando AI falha
-              aiResponse = {
-                response: 'Desculpe, estou com dificuldades técnicas no momento. Pode repetir sua mensagem?',
-                agent_used: 'fallback',
-                should_handoff: false
-              };
+              // Não define resposta de fallback - deixa que o sistema trate o erro
+              aiResponse = null;
             }
 
             // 9. Limpa Redis
