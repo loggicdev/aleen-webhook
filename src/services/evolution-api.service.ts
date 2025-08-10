@@ -3,14 +3,7 @@ import logger from '../utils/logger';
 
 interface SendTextMessageRequest {
   number: string;
-  textMessage: {
-    text: string;
-  };
-  options?: {
-    delay?: number;
-    presence?: 'composing' | 'recording' | 'paused';
-    linkPreview?: boolean;
-  };
+  text: string;  // Direto, não dentro de textMessage
 }
 
 interface SendTextMessageResponse {
@@ -84,12 +77,10 @@ class EvolutionApiService {
     }
   ): Promise<SendTextMessageResponse> {
     try {
-      // Estrutura simplificada que funciona com Evolution API
+      // Estrutura correta da Evolution API
       const payload = {
         number: cleanNumber,
-        textMessage: {
-          text: text
-        }
+        text: text  // Direto, não dentro de textMessage
       };
 
       const url = `${this.baseUrl}/message/sendText/${this.instance}`;

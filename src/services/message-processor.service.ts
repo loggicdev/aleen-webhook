@@ -28,6 +28,14 @@ export class MessageProcessorService {
     next_agent?: string;
   }> {
     try {
+      logger.info('Starting AI processing', {
+        userNumber,
+        userName,
+        messageLength: message.length,
+        historyLength: conversationHistory.length,
+        recommendedAgent
+      });
+
       const aiResponse = await aiAgentService.processMessage(
         userNumber,
         userName,
@@ -36,13 +44,14 @@ export class MessageProcessorService {
         recommendedAgent
       );
 
-      logger.info('AI Agent response generated', {
+      logger.info('AI Agent response generated successfully', {
         userNumber,
         userName,
         agent_used: aiResponse.agent_used,
         should_handoff: aiResponse.should_handoff,
         next_agent: aiResponse.next_agent,
-        responseLength: aiResponse.response.length
+        responseLength: aiResponse.response.length,
+        responsePreview: aiResponse.response.substring(0, 100) + '...'
       });
 
       return aiResponse;
@@ -50,7 +59,8 @@ export class MessageProcessorService {
       logger.error('Error processing message with AI agents', {
         userNumber,
         userName,
-        error: error instanceof Error ? error.message : 'Unknown error'
+        error: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : undefined
       });
 
       // Retorna resposta padrão em caso de erro
