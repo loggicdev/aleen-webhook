@@ -218,29 +218,14 @@ export class RedisMessageService {
                 // Se é primeira mensagem ou precisa de onboarding, envia saudação e não processa com IA
                 if (userStatus.isFirstMessage || userStatus.needsOnboarding) {
                   
-                  // Busca o prompt de saudação do agente onboarding
-                  const onboardingAgent = await supabaseUserService.getAgentByType('GREETING_WITHOUT_MEMORY');
-                  
-                  let welcomeMessage: string;
-                  if (onboardingAgent?.prompt) {
-                    welcomeMessage = onboardingAgent.prompt
-                      .replace('{nome}', userData.userName || 'usuário')
-                      .replace('{usuario}', userData.userName || 'usuário');
-                  } else {
-                    // Fallback se não encontrar prompt
-                    welcomeMessage = `Olá${userData.userName ? ` ${userData.userName}` : ''}! 👋
+                  // Em vez de usar o prompt (que é para a IA), criamos uma mensagem de boas-vindas
+                  const welcomeMessage = `Oi${userData.userName ? ` ${userData.userName}` : ''}! �
 
-Seja bem-vindo(a) à *Aleen IA*! 🤖✨
+Eu sou a Aleen, sua personal trainer inteligente aqui no WhatsApp!
 
-Sou sua assistente inteligente e estou aqui para te ajudar com automação de atendimento e soluções de IA para seu negócio.
+Estou aqui para criar treinos e planos de nutrição 100% personalizados para você.
 
-Para começarmos, me conte um pouco sobre você:
-• Qual o nome da sua empresa?
-• Em que ramo vocês atuam?
-• Qual o principal desafio que vocês enfrentam hoje?
-
-Vamos conversar e descobrir como posso te ajudar! 😊`;
-                  }
+Quer conhecer como funciona? Temos 14 dias grátis! �`;
 
                   // Envia mensagem via Evolution API
                   const sendResult = await evolutionApiService.sendTextMessage(
