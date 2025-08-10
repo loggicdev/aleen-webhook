@@ -271,8 +271,70 @@ export class RedisMessageService {
                 stack: aiError instanceof Error ? aiError.stack : undefined
               });
               
-              // Não define resposta de fallback - deixa que o sistema trate o erro
-              aiResponse = null;
+              // Verifica se é erro de conexão com serviço Python
+              const isConnectionError = aiError instanceof Error && 
+                (aiError.message.includes('ENOTFOUND') || 
+                 aiError.message.includes('ECONNREFUSED') ||
+                 aiError.message.includes('getaddrinfo') ||
+                 aiError.message.includes('python-ai') ||
+                 aiError.message.includes('connect ECONNREFUSED') ||
+                 (aiError as any).code === 'ECONNREFUSED' ||
+                 (aiError as any).code === 'ENOTFOUND');
+
+              logger.info('Connection error check details', {
+                redisKey,
+                isConnectionError,
+                errorMessage: aiError instanceof Error ? aiError.message : 'No message',
+                errorCode: (aiError as any)?.code || 'No code'
+              });
+
+              if (isConnectionError && userData) {
+                // Gera resposta de fallback informativa sobre o serviço estar offline
+                try {
+                  logger.warn('Python AI service is unavailable, sending informative fallback message', {
+                    redisKey,
+                    userNumber: userData.userNumber
+                  });
+
+                  const fallbackMessage = "Olá! Sou a Aleen IA. 🤖\n\nNo momento nossos sistemas de IA estão passando por uma manutenção técnica, mas estarei de volta em breve para te ajudar da melhor forma!\n\nEnquanto isso, você pode me enviar sua dúvida que assim que eu voltar, respondo com todo cuidado. 💪\n\nObrigada pela paciência!";
+
+                  // Envia a mensagem de fallback via Evolution API
+                  const sendResult = await evolutionApiService.sendAgentMessage(
+                    userData.userNumber,
+                    fallbackMessage,
+                    'fallback'
+                  );
+
+                  if (sendResult.success) {
+                    logger.info('Fallback message sent successfully during Python AI outage', {
+                      userNumber: userData.userNumber,
+                      messageId: sendResult.messageId
+                    });
+                    
+                    // Define resposta para logging
+                    aiResponse = {
+                      response: fallbackMessage,
+                      agent_used: 'fallback',
+                      should_handoff: false
+                    };
+                  } else {
+                    logger.error('Failed to send fallback message during Python AI outage', {
+                      userNumber: userData.userNumber,
+                      error: sendResult.error
+                    });
+                    aiResponse = null;
+                  }
+                } catch (fallbackError) {
+                  logger.error('Error sending fallback message', {
+                    redisKey,
+                    error: fallbackError instanceof Error ? fallbackError.message : 'Unknown fallback error'
+                  });
+                  aiResponse = null;
+                }
+              } else {
+                // Para outros tipos de erro, não envia resposta
+                aiResponse = null;
+              }
             }
 
             // 9. Limpa Redis

@@ -789,7 +789,56 @@ async def send_whatsapp_message(request: SendWhatsAppRequest):
 
 @app.get("/health")
 async def health_check():
-    return {"status": "healthy", "service": "aleen-ai-agents"}
+    """Health check completo que verifica todas as dependências"""
+    status = "healthy"
+    checks = {}
+    
+    # Verifica Redis
+    try:
+        redis_client.ping()
+        checks["redis"] = {"status": "ok", "message": "Connected"}
+    except Exception as e:
+        checks["redis"] = {"status": "error", "message": str(e)}
+        status = "unhealthy"
+    
+    # Verifica OpenAI
+    try:
+        # Teste simples da API OpenAI
+        openai_client.models.list()
+        checks["openai"] = {"status": "ok", "message": "Connected"}
+    except Exception as e:
+        checks["openai"] = {"status": "error", "message": str(e)}
+        status = "unhealthy"
+    
+    # Verifica Supabase
+    try:
+        # Teste simples do Supabase
+        result = supabase.table('agents').select('id').limit(1).execute()
+        checks["supabase"] = {"status": "ok", "message": "Connected"}
+    except Exception as e:
+        checks["supabase"] = {"status": "error", "message": str(e)}
+        status = "unhealthy"
+    
+    # Verifica agentes carregados
+    agents_loaded = len(agents_cache)
+    checks["agents"] = {
+        "status": "ok" if agents_loaded > 0 else "warning",
+        "message": f"{agents_loaded} agents loaded",
+        "agents": list(agents_cache.keys())
+    }
+    
+    response = {
+        "status": status,
+        "service": "aleen-ai-agents",
+        "timestamp": time.time(),
+        "checks": checks
+    }
+    
+    # Retorna 503 se unhealthy, 200 se healthy
+    if status == "unhealthy":
+        raise HTTPException(status_code=503, detail=response)
+    
+    return response
 
 @app.get("/agents")
 async def list_agents():

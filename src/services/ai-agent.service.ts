@@ -24,6 +24,49 @@ class AiAgentService {
     this.pythonServiceUrl = config.pythonAi.baseUrl;
   }
 
+  private isConnectionError(error: any): boolean {
+    if (!error) return false;
+    
+    const errorMessage = error.message || '';
+    const errorCode = error.code || '';
+    
+    // Verificar se é erro de conexão específico
+    const connectionErrors = [
+      'ENOTFOUND',
+      'ECONNREFUSED', 
+      'ECONNRESET',
+      'ETIMEDOUT',
+      'getaddrinfo ENOTFOUND',
+      'connect ECONNREFUSED'
+    ];
+    
+    // Verificar por código de erro ou mensagem
+    const hasConnectionError = connectionErrors.some(errType => 
+      errorCode.includes(errType) || errorMessage.includes(errType)
+    );
+    
+    // Verificar se é AggregateError com erros de conexão
+    if (error.name === 'AggregateError' && Array.isArray(error.errors)) {
+      return error.errors.some((err: any) => this.isConnectionError(err));
+    }
+    
+    // Verificar se é erro de axios com problemas de rede
+    if (error.isAxiosError && !error.response) {
+      return true;
+    }
+    
+    logger.debug('Connection error check', {
+      errorMessage,
+      errorCode,
+      errorName: error.name,
+      hasConnectionError,
+      isAxiosError: error.isAxiosError,
+      hasResponse: !!error.response
+    });
+    
+    return hasConnectionError;
+  }
+
   async processMessage(
     userId: string,
     userName: string,
@@ -114,9 +157,19 @@ class AiAgentService {
         } : {})
       });
       
-      // Fallback para resposta padrão em caso de erro
+      // Detectar se é erro de conexão para usar mensagem específica
+      const isConnectionError = this.isConnectionError(error);
+      const fallbackMessage = isConnectionError 
+        ? 'Olá! 👋 Nosso sistema de IA está temporariamente em manutenção. Nossa equipe está trabalhando para resolver rapidamente. Que tal tentar novamente em alguns minutos? Se for urgente, você pode entrar em contato conosco diretamente!'
+        : 'Olá! Sou a Aleen IA. No momento estou com dificuldades técnicas, mas em breve poderei te ajudar melhor. Como posso te ajudar hoje?';
+      
+      logger.info('Using fallback message', {
+        isConnectionError,
+        messageType: isConnectionError ? 'maintenance' : 'technical_difficulties'
+      });
+      
       return {
-        response: 'Olá! Sou a Aleen IA. No momento estou com dificuldades técnicas, mas em breve poderei te ajudar melhor. Como posso te ajudar hoje?',
+        response: fallbackMessage,
         agent_used: 'fallback',
         should_handoff: false
       };
