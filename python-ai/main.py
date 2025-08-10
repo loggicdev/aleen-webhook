@@ -20,20 +20,32 @@ load_dotenv()
 
 app = FastAPI(title="Aleen AI Agents", version="1.0.0")
 
-# Redis connection
-try:
-    redis_client = redis.from_url(os.getenv("REDIS_URL", "redis://localhost:6379"))
-    # Test connection
-    redis_client.ping()
-    print("✅ Redis conectado com sucesso")
-except Exception as e:
-    print(f"⚠️ Erro ao conectar Redis: {e}")
-    # Create a mock Redis client for development
-    class MockRedis:
-        def get(self, key): return None
-        def setex(self, key, time, value): pass
-        def ping(self): return True
-    redis_client = MockRedis()
+# Redis connection with retry mechanism
+def connect_redis_with_retry(max_retries=5, delay=2):
+    for attempt in range(max_retries):
+        try:
+            redis_url = os.getenv("REDIS_URL", "redis://localhost:6379")
+            redis_client = redis.from_url(redis_url)
+            # Test connection
+            redis_client.ping()
+            print("✅ Redis conectado com sucesso")
+            return redis_client
+        except Exception as e:
+            if attempt < max_retries - 1:
+                print(f"⚠️ Tentativa {attempt + 1}/{max_retries} - Erro ao conectar Redis: {e}")
+                print(f"🔄 Tentando novamente em {delay} segundos...")
+                time.sleep(delay)
+            else:
+                print(f"❌ Falha ao conectar Redis após {max_retries} tentativas: {e}")
+                print("🔧 Usando cliente Redis mock para desenvolvimento")
+                # Create a mock Redis client for development
+                class MockRedis:
+                    def get(self, key): return None
+                    def setex(self, key, time, value): pass
+                    def ping(self): return True
+                return MockRedis()
+
+redis_client = connect_redis_with_retry()
 
 # OpenAI client
 openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
