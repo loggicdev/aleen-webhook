@@ -2,6 +2,12 @@
 
 ## 📋 Configuração no Dokploy
 
+### 0. Preparar Supabase (IMPORTANTE - Execute primeiro!)
+1. Acesse seu projeto Supabase: https://qzzeewrkdruavnnecypl.supabase.co
+2. Vá em **SQL Editor**
+3. Execute o script `supabase-setup.sql` que está no repositório
+4. Isso criará as tabelas: `leads`, `users`, `agents` com as colunas necessárias
+
 ### 1. Criar Application
 1. **Create Application** → **Docker Compose**
 2. **Name:** `aleen-ia`
