@@ -2,6 +2,7 @@ import { EvolutionWebhookPayload, ProcessedMessage, ProcessedMessageType } from 
 import { MessageTypeService } from './message-type.service';
 import { InputDataService } from './input-data.service';
 import { InputData, ProcessedInputData } from '../types/input-data.types';
+import { aiAgentService } from './ai-agent.service';
 import logger from '../utils/logger';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -10,6 +11,56 @@ import { v4 as uuidv4 } from 'uuid';
  */
 export class MessageProcessorService {
   private static inputDataService = new InputDataService();
+
+  /**
+   * Processa uma mensagem de texto com os agentes de IA
+   */
+  public static async processTextWithAI(
+    userNumber: string,
+    userName: string,
+    message: string,
+    conversationHistory: string[] = [],
+    recommendedAgent?: string
+  ): Promise<{
+    response: string;
+    agent_used: string;
+    should_handoff: boolean;
+    next_agent?: string;
+  }> {
+    try {
+      const aiResponse = await aiAgentService.processMessage(
+        userNumber,
+        userName,
+        message,
+        conversationHistory,
+        recommendedAgent
+      );
+
+      logger.info('AI Agent response generated', {
+        userNumber,
+        userName,
+        agent_used: aiResponse.agent_used,
+        should_handoff: aiResponse.should_handoff,
+        next_agent: aiResponse.next_agent,
+        responseLength: aiResponse.response.length
+      });
+
+      return aiResponse;
+    } catch (error) {
+      logger.error('Error processing message with AI agents', {
+        userNumber,
+        userName,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+
+      // Retorna resposta padrão em caso de erro
+      return {
+        response: 'Olá! Sou a Aleen IA. No momento estou com dificuldades técnicas, mas em breve poderei te ajudar melhor. Como posso te ajudar hoje?',
+        agent_used: 'fallback',
+        should_handoff: false
+      };
+    }
+  }
 
   /**
    * Processa mensagens de texto (equivalente ao node "dadosComTexto")

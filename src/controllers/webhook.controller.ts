@@ -189,21 +189,29 @@ export class WebhookController {
       // 1. Criar dados de entrada para texto
       const processedData = MessageProcessorService.processTextMessage(payload);
       
-      // 2. Processar fluxo de mensagens Redis
+      // 2. Processar fluxo de mensagens Redis com IA
       const redisResult = await RedisMessageService.processMessageFlow(processedData);
       
       if (redisResult.shouldProceed) {
-        logger.info('Text message ready for AI processing', {
+        logger.info('Text message processed with AI', {
           userNumber: processedData.number,
           userName: processedData.nome,
-          aggregatedMessage: redisResult.aggregatedMessage?.substring(0, 100) + '...'
+          aggregatedMessage: redisResult.aggregatedMessage?.substring(0, 100) + '...',
+          aiAgent: redisResult.aiResponse?.agent_used,
+          aiResponse: redisResult.aiResponse?.response?.substring(0, 100) + '...',
+          shouldHandoff: redisResult.aiResponse?.should_handoff
         });
         
-        // TODO: Aqui vai a lógica de verificação de usuário e classificação de necessidade
-        // Por enquanto apenas logga que chegou até aqui
-        logger.info('Next step: verifyUser and classify user needs', {
-          redisKey: processedData.chaveRedis
-        });
+        // TODO: Enviar resposta de volta via WhatsApp
+        // TODO: Se houver handoff, processar transferência entre agentes
+        
+        if (redisResult.aiResponse?.should_handoff) {
+          logger.info('Agent handoff required', {
+            currentAgent: redisResult.aiResponse.agent_used,
+            nextAgent: redisResult.aiResponse.next_agent,
+            userNumber: processedData.number
+          });
+        }
       }
       
     } catch (error) {

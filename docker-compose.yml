@@ -8,12 +8,31 @@ services:
     environment:
       - NODE_ENV=development
       - REDIS_URL=redis://redis:6379
+      - PYTHON_AI_URL=http://python-ai:8000
     depends_on:
       - redis
+      - python-ai
     volumes:
       - .:/app
       - /app/node_modules
     command: npm run dev
+
+  python-ai:
+    build: 
+      context: .
+      dockerfile: Dockerfile.python
+    ports:
+      - "8000:8000"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - SUPABASE_URL=${SUPABASE_URL:-${NEXT_PUBLIC_SUPABASE_URL}}
+      - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
+      - SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}
+    depends_on:
+      - redis
+    volumes:
+      - ./python-ai:/app
 
   redis:
     image: redis:7-alpine

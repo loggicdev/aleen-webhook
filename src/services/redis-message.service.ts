@@ -1,4 +1,7 @@
 import { InputData } from '../types/input-data.types';
+import { MessageProcessorService } from './message-processor.service';
+import { supabaseUserService, UserStatus } from './supabase-user.service';
+import { evolutionApiService } from './evolution-api.service';
 import logger from '../utils/logger';
 import RedisClient from '../utils/redis';
 
@@ -17,7 +20,14 @@ export class RedisMessageService {
   private static processing = new Map<string, boolean>();
   
   // Map para armazenar resolvers de Promises pendentes
-  private static pendingResolvers = new Map<string, Array<(result: { shouldProceed: boolean; aggregatedMessage?: string }) => void>>();
+  private static pendingResolvers = new Map<string, Array<(result: { 
+    shouldProceed: boolean; 
+    aggregatedMessage?: string;
+    aiResponse?: any;
+    userStatus?: any;
+    welcomeMessageSent?: boolean;
+    skipAI?: boolean;
+  }) => void>>();
   
   /**
    * Adiciona mensagem à lista no Redis (equivale ao node "listarMensagens")
@@ -136,6 +146,7 @@ export class RedisMessageService {
   public static async processMessageFlow(inputData: InputData): Promise<{
     shouldProceed: boolean;
     aggregatedMessage?: string;
+    aiResponse?: any;
   }> {
     try {
       const redisKey = inputData.chaveRedis;
@@ -186,19 +197,156 @@ export class RedisMessageService {
             // 5. Agrega mensagens
             const aggregatedMessage = await this.aggregateMessages(redisKey);
 
-            // 6. Limpa Redis
+            // 6. Verifica status do usuário no Supabase ANTES de processar com IA
+            const userData = this.getUserDataFromRedisKey(redisKey);
+            let userStatus: UserStatus | null = null;
+            
+            if (userData) {
+              try {
+                userStatus = await supabaseUserService.checkUserStatus(userData.userNumber);
+                
+                logger.info('User status checked', {
+                  redisKey,
+                  userNumber: userData.userNumber,
+                  isLead: userStatus.isLead,
+                  isUser: userStatus.isUser,
+                  isFirstMessage: userStatus.isFirstMessage,
+                  needsOnboarding: userStatus.needsOnboarding,
+                  recommendedAgent: userStatus.recommendedAgent
+                });
+
+                // Se é primeira mensagem ou precisa de onboarding, envia saudação e não processa com IA
+                if (userStatus.isFirstMessage || userStatus.needsOnboarding) {
+                  
+                  // Busca o prompt de saudação do agente onboarding
+                  const onboardingAgent = await supabaseUserService.getAgentByType('onboarding');
+                  
+                  let welcomeMessage: string;
+                  if (onboardingAgent?.prompt_saudacao) {
+                    welcomeMessage = onboardingAgent.prompt_saudacao
+                      .replace('{nome}', userData.userName || 'usuário')
+                      .replace('{usuario}', userData.userName || 'usuário');
+                  } else {
+                    // Fallback se não encontrar prompt
+                    welcomeMessage = `Olá${userData.userName ? ` ${userData.userName}` : ''}! 👋
+
+Seja bem-vindo(a) à *Aleen IA*! 🤖✨
+
+Sou sua assistente inteligente e estou aqui para te ajudar com automação de atendimento e soluções de IA para seu negócio.
+
+Para começarmos, me conte um pouco sobre você:
+• Qual o nome da sua empresa?
+• Em que ramo vocês atuam?
+• Qual o principal desafio que vocês enfrentam hoje?
+
+Vamos conversar e descobrir como posso te ajudar! 😊`;
+                  }
+
+                  // Envia mensagem via Evolution API
+                  const sendResult = await evolutionApiService.sendTextMessage(
+                    userData.userNumber,
+                    welcomeMessage
+                  );
+
+                  if (sendResult.success) {
+                    logger.info('Welcome message sent successfully', {
+                      userNumber: userData.userNumber,
+                      messageId: sendResult.messageId,
+                      isFirstMessage: userStatus.isFirstMessage
+                    });
+                  } else {
+                    logger.error('Failed to send welcome message', {
+                      userNumber: userData.userNumber,
+                      error: sendResult.error
+                    });
+                  }
+
+                  // 7. Limpa Redis
+                  await this.clearMessages(redisKey);
+
+                  // Resolve sem processar IA (já enviou resposta)
+                  this.resolveAllPending(redisKey, {
+                    shouldProceed: true,
+                    aggregatedMessage,
+                    userStatus,
+                    welcomeMessageSent: sendResult.success,
+                    skipAI: true
+                  });
+
+                  return;
+                }
+
+              } catch (userError) {
+                logger.warn('Failed to check user status, continuing with AI processing', {
+                  redisKey,
+                  error: userError instanceof Error ? userError.message : 'Unknown error'
+                });
+              }
+            }
+
+            // 8. Processa com AI Agents (apenas se não for primeira mensagem/onboarding)
+            let aiResponse;
+            try {
+              if (userData && userStatus) {
+                // Usa o agente recomendado baseado no status do usuário
+                aiResponse = await MessageProcessorService.processTextWithAI(
+                  userData.userNumber,
+                  userData.userName,
+                  aggregatedMessage,
+                  [], // TODO: buscar histórico do Redis/Supabase
+                  userStatus.recommendedAgent
+                );
+
+                logger.info('AI Agent processed message', {
+                  redisKey,
+                  agent_used: aiResponse.agent_used,
+                  should_handoff: aiResponse.should_handoff,
+                  responseLength: aiResponse.response.length,
+                  userStatus: userStatus.recommendedAgent
+                });
+
+                // Envia resposta da IA via Evolution API
+                const sendResult = await evolutionApiService.sendAgentMessage(
+                  userData.userNumber,
+                  aiResponse.response,
+                  aiResponse.agent_used
+                );
+
+                if (sendResult.success) {
+                  logger.info('AI response sent successfully', {
+                    userNumber: userData.userNumber,
+                    messageId: sendResult.messageId,
+                    agent: aiResponse.agent_used
+                  });
+                } else {
+                  logger.error('Failed to send AI response', {
+                    userNumber: userData.userNumber,
+                    error: sendResult.error
+                  });
+                }
+              }
+            } catch (aiError) {
+              logger.warn('AI processing failed, continuing with aggregated message', {
+                redisKey,
+                error: aiError instanceof Error ? aiError.message : 'Unknown AI error'
+              });
+            }
+
+            // 9. Limpa Redis
             await this.clearMessages(redisKey);
 
             logger.info('Message aggregation completed successfully', {
               redisKey,
               totalMessages: messages.length,
-              aggregatedLength: aggregatedMessage.length
+              aggregatedLength: aggregatedMessage.length,
+              aiProcessed: !!aiResponse
             });
 
             // Resolve todas as Promises pendentes
             this.resolveAllPending(redisKey, {
               shouldProceed: true,
-              aggregatedMessage
+              aggregatedMessage,
+              aiResponse
             });
 
           } catch (error) {
@@ -238,7 +386,14 @@ export class RedisMessageService {
   /**
    * Resolve todas as Promises pendentes para uma chave específica
    */
-  private static resolveAllPending(redisKey: string, result: { shouldProceed: boolean; aggregatedMessage?: string }): void {
+  private static resolveAllPending(redisKey: string, result: { 
+    shouldProceed: boolean; 
+    aggregatedMessage?: string;
+    aiResponse?: any;
+    userStatus?: any;
+    welcomeMessageSent?: boolean;
+    skipAI?: boolean;
+  }): void {
     const resolvers = this.pendingResolvers.get(redisKey);
     if (resolvers) {
       resolvers.forEach(resolve => resolve(result));
@@ -253,13 +408,46 @@ export class RedisMessageService {
   /**
    * Aguarda o processamento em andamento para uma chave específica
    */
-  private static async waitForProcessing(redisKey: string): Promise<{ shouldProceed: boolean; aggregatedMessage?: string }> {
+  private static async waitForProcessing(redisKey: string): Promise<{ 
+    shouldProceed: boolean; 
+    aggregatedMessage?: string;
+    aiResponse?: any;
+    userStatus?: any;
+    welcomeMessageSent?: boolean;
+    skipAI?: boolean;
+  }> {
     return new Promise((resolve) => {
       if (!this.pendingResolvers.has(redisKey)) {
         this.pendingResolvers.set(redisKey, []);
       }
       this.pendingResolvers.get(redisKey)!.push(resolve);
     });
+  }
+
+  /**
+   * Extrai dados do usuário da chave Redis
+   * Formato da chave: {number}{firstName}{lastName}aleen
+   */
+  private static getUserDataFromRedisKey(redisKey: string): { userNumber: string; userName: string } | null {
+    try {
+      // Remove 'aleen' do final para obter a parte com os dados
+      const withoutSuffix = redisKey.replace(/aleen$/, '');
+      
+      // Extrai o número (parte inicial numérica)
+      const numberMatch = withoutSuffix.match(/^(\d+)/);
+      if (!numberMatch) return null;
+      
+      const userNumber = numberMatch[1];
+      const namesPart = withoutSuffix.substring(userNumber.length);
+      
+      // Se não tem nome, usa número como fallback
+      const userName = namesPart || `User ${userNumber}`;
+      
+      return { userNumber, userName };
+    } catch (error) {
+      logger.warn('Failed to parse user data from Redis key', { redisKey });
+      return null;
+    }
   }
 
   /**
@@ -307,6 +495,10 @@ export class RedisMessageService {
   public static async forceProcess(redisKey: string): Promise<{
     shouldProceed: boolean;
     aggregatedMessage?: string;
+    aiResponse?: any;
+    userStatus?: any;
+    welcomeMessageSent?: boolean;
+    skipAI?: boolean;
   }> {
     try {
       // Cancela timeout se existir
