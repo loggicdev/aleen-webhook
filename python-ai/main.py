@@ -234,10 +234,27 @@ def load_agents_from_supabase():
                 'identifier': identifier
             }
             
-            # Cria o agente com o prompt do Supabase
+            # Cria o agente com o prompt do Supabase + instrução de idioma
+            base_prompt = agent_data.get('prompt', '')
+            
+            # Adiciona instrução de idioma responsivo
+            language_instruction = """
+
+INSTRUÇÃO CRÍTICA DE IDIOMA:
+- SEMPRE responda no mesmo idioma que o usuário está falando
+- Se o usuário falar em português, responda em português  
+- Se o usuário falar em inglês, responda em inglês
+- Se o usuário falar em espanhol, responda em espanhol
+- Mantenha o mesmo idioma durante toda a conversa
+- Seja natural e fluente no idioma escolhido
+
+"""
+            
+            final_prompt = base_prompt + language_instruction
+            
             agents_cache[agent_type] = Agent(
                 name=f"{agent_data.get('name', 'Aleen')} - {agent_type.title()}",
-                instructions=agent_data.get('prompt', ''),
+                instructions=final_prompt,
                 model="gpt-4"
             )
         
@@ -294,22 +311,24 @@ def create_default_agents():
     """Cria agentes padrão caso não consiga carregar do Supabase"""
     global agents_cache, agents_config
     
+    print("🔧 Criando agentes padrão em português...")
+    
     default_configs = {
         'onboarding': {
-            'name': 'Aleen Onboarding Agent',
-            'prompt': """You are Aleen, the intelligent fitness and nutrition agent. You are very friendly, helpful, and clear.
+            'name': 'Aleen Onboarding PT',
+            'prompt': """Você é a Aleen, a assistente inteligente de fitness e nutrição. Você é muito amigável, prestativa e clara.
 
-Your mission is to welcome new contacts, briefly introduce the app, and ask if they're interested in learning about it.
+Sua missão é dar as boas-vindas a novos contatos, apresentar brevemente o app e perguntar se eles têm interesse em conhecer.
 
-**RULES:**
-- Always respond in the same language the user is speaking to you
-- Always break your messages with \\n\\n for more human and natural reading
-- Be warm and friendly
-- Focus only on welcoming and introducing the fitness app
-- DO NOT invent information or "guess" answers
+**REGRAS:**
+- SEMPRE responda no mesmo idioma que o usuário está falando
+- SEMPRE quebre suas mensagens com \\n\\n para leitura mais humana e natural
+- Seja calorosa e amigável
+- Foque apenas em dar boas-vindas e apresentar o app de fitness
+- NÃO invente informações ou "adivinhe" respostas
 
-About Aleen: Your smart personal trainer that works on WhatsApp, creates personalized workout and nutrition plans.
-Ask if they want to learn more or start their 14-day free trial."""
+Sobre a Aleen: Sua personal trainer inteligente que funciona no WhatsApp, cria planos personalizados de treino e nutrição.
+Pergunte se eles querem conhecer mais ou iniciar o teste grátis de 14 dias."""
         },
         'sales': {
             'name': 'Aleen Sales Agent',
@@ -452,12 +471,37 @@ def determine_initial_agent(message: str, user_history: List[str], recommended_a
 @app.post("/chat", response_model=MessageResponse)
 async def chat(request: MessageRequest):
     try:
+        print(f"📨 Recebida mensagem: {request.message}")
+        print(f"👤 Usuário: {request.user_name} ({request.user_id})")
+        print(f"🎯 Agente recomendado: {request.recommended_agent}")
+        
+        # Verifica se agentes estão carregados
+        if not agents_cache:
+            print("❌ ERRO: Nenhum agente carregado do Supabase!")
+            print("🔄 Tentando recarregar agentes...")
+            success = load_agents_from_supabase()
+            if not success:
+                print("❌ FALHA ao recarregar agentes")
+                raise HTTPException(status_code=503, detail="Agentes não disponíveis")
+        
+        print(f"✅ Agentes disponíveis: {list(agents_cache.keys())}")
+        
         # Determina agente inicial
         initial_agent = determine_initial_agent(
             request.message, 
             request.conversation_history,
             request.recommended_agent
         )
+        
+        print(f"🎯 Agente selecionado: {initial_agent}")
+        
+        # Verifica se o agente existe
+        if initial_agent not in agents_cache:
+            print(f"❌ ERRO: Agente '{initial_agent}' não encontrado no cache!")
+            print(f"🔍 Agentes disponíveis: {list(agents_cache.keys())}")
+            # Usa agente de fallback
+            initial_agent = 'onboarding' if 'onboarding' in agents_cache else list(agents_cache.keys())[0]
+            print(f"🔄 Usando agente de fallback: {initial_agent}")
         
         # Busca contexto do usuário no Redis
         user_context = redis_client.get(f"user_context:{request.user_id}")
@@ -481,16 +525,76 @@ async def chat(request: MessageRequest):
         # Executa com Agents SDK
         agent = agents_cache[initial_agent]
         
+        print(f"🤖 Executando agente: {initial_agent}")
+        print(f"📝 Prompt do agente: {agent.instructions[:200]}...")
+        print(f"💬 Input da mensagem: {input_message}")
+        
         # Prepara o input com contexto
         input_message = request.message
         if context_str:
             input_message = f"Contexto do usuário: {context_str}\n\nMensagem: {request.message}"
         
+        # Adiciona instrução explícita de idioma
+        language_instruction = f"\n\nIMPORTANTE: Responda no mesmo idioma da mensagem do usuário. Se a mensagem for em português, responda em português. Se for em inglês, responda em inglês."
+        input_message = input_message + language_instruction
+        
         # Executa o agente
-        response = await Runner.run(
-            starting_agent=agent,
-            input=input_message
-        )
+        print(f"🚀 Executando Runner.run com input: {input_message}")
+        print(f"🔧 Agent instructions: {agent.instructions}")
+        print(f"🔧 Agent name: {agent.name}")
+        print(f"🔧 Agent model: {getattr(agent, 'model', 'unknown')}")
+        
+        try:
+            response = await Runner.run(
+                starting_agent=agent,
+                input=input_message
+            )
+            print(f"✅ Runner executado com sucesso")
+            print(f"✅ Resposta do agente: {response.final_output}")
+            print(f"🔧 Tipo da resposta: {type(response.final_output)}")
+            print(f"🔧 Tamanho da resposta: {len(response.final_output) if response.final_output else 0}")
+            
+        except Exception as runner_error:
+            print(f"❌ ERRO no Runner.run: {runner_error}")
+            print(f"❌ Tipo do erro: {type(runner_error)}")
+            raise runner_error
+        
+        # Validação: garante que não está retornando o prompt
+        if (response.final_output and 
+            len(response.final_output) > 500 and 
+            ("You are Aleen" in response.final_output or "BEHAVIOR:" in response.final_output or
+             "**ABOUT ALEEN:**" in response.final_output or "**RULES:**" in response.final_output)):
+            print("⚠️ ERRO: Agente retornou o prompt ao invés de uma resposta!")
+            print(f"🔍 Resposta problemática: {response.final_output[:300]}...")
+            
+            # Resposta de fallback em português
+            fallback_response = f"Olá! Sou a Aleen, sua assistente de fitness e nutrição. Como posso te ajudar hoje?"
+            
+            print(f"🔄 Usando resposta de fallback: {fallback_response}")
+            
+            return MessageResponse(
+                response=fallback_response,
+                agent_used=f"{initial_agent}_fallback",
+                should_handoff=False,
+                next_agent=None
+            )
+        
+        # Validação adicional: verifica se resposta é muito curta ou inválida
+        if not response.final_output or len(response.final_output.strip()) < 10:
+            print("⚠️ ERRO: Resposta muito curta ou vazia!")
+            print(f"🔍 Resposta recebida: '{response.final_output}'")
+            
+            fallback_response = f"Olá! Sou a Aleen, sua assistente de fitness e nutrição. Como posso te ajudar hoje?"
+            
+            return MessageResponse(
+                response=fallback_response,
+                agent_used=f"{initial_agent}_fallback",
+                should_handoff=False,
+                next_agent=None
+            )
+        
+        print(f"✅ Resposta válida processada com sucesso")
+        print(f"📤 Enviando resposta: {response.final_output[:100]}...")
         
         # Salva contexto atualizado no Redis
         updated_context = f"{context_str}\nUser: {request.message}\nAgent: {response.final_output}"
