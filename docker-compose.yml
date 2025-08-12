@@ -32,6 +32,8 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
+    networks:
+      - aleen_network
 
   redis:
     image: redis:7-alpine
@@ -45,6 +47,15 @@ services:
       interval: 10s
       timeout: 5s
       retries: 3
+    networks:
+      - aleen_network
 
 volumes:
   redis_data:
+
+networks:
+  aleen_network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 192.168.100.0/24
