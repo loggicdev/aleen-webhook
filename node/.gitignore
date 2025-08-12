@@ -66,4 +66,5 @@ dump.rdb
 .pm2/
 
 # N8N workflow files (DBA)
+[DBA] FLUXO - START.json
 *[DBA]*
