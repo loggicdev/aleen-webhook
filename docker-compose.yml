@@ -9,7 +9,7 @@ services:
       - NODE_ENV=${NODE_ENV:-production}
       - PORT=3000
       - REDIS_URL=redis://redis:6379
-      - PYTHON_AI_URL=http://python-ai:8000
+      - PYTHON_AI_URL=https://ai-aleen.live.claudy.host
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - EVOLUTION_API_KEY=${EVOLUTION_API_KEY}
       - EVOLUTION_API_BASE_URL=${EVOLUTION_API_BASE_URL}
@@ -26,37 +26,9 @@ services:
     depends_on:
       redis:
         condition: service_healthy
-      python-ai:
-        condition: service_healthy
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-
-  python-ai:
-    build: 
-      context: .
-      dockerfile: Dockerfile.python
-    ports:
-      - "8001:8000"
-    environment:
-      - REDIS_URL=redis://redis:6379
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - SUPABASE_URL=${SUPABASE_URL}
-      - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
-      - SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}
-      - NEXT_PUBLIC_SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL}
-      - EVOLUTION_API_BASE_URL=${EVOLUTION_API_BASE_URL}
-      - EVOLUTION_API_KEY=${EVOLUTION_API_KEY}
-      - EVOLUTION_INSTANCE=${EVOLUTION_INSTANCE}
-    depends_on:
-      redis:
-        condition: service_healthy
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 30s
       timeout: 10s
       retries: 3
