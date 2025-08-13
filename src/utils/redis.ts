@@ -45,11 +45,15 @@ class RedisClient {
 
         // Parse manual da URL para garantir que a autenticação funcione
         const url = new URL(config.redis.url);
+        
+        // Decodifica a senha se estiver URL-encoded
+        const password = decodeURIComponent(url.password || '') || config.redis.password;
+        
         const redisConfig = {
           host: url.hostname,
           port: parseInt(url.port) || 6379,
-          username: url.username && url.username !== 'default' ? url.username : 'default',
-          password: url.password || config.redis.password,
+          username: url.username || 'default',
+          password: password,
           db: parseInt(url.pathname.slice(1)) || 0,
           enableReadyCheck: false,
           maxRetriesPerRequest: null,
@@ -57,7 +61,11 @@ class RedisClient {
           connectTimeout: 60000,
           commandTimeout: 30000,
           family: 4, // Force IPv4
-          keepAlive: 30000
+          keepAlive: 30000,
+          // Configurações adicionais para Redis externo
+          retryDelayOnFailover: 1000,
+          enableOfflineQueue: false,
+          autoResubscribe: false
         };
 
         logger.info('Parsed Redis config', {
