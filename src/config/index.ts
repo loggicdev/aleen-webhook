@@ -19,6 +19,7 @@ interface Config {
   redis: {
     host: string;
     port: number;
+    username?: string;
     password?: string;
     db: number;
     url?: string; // Connection string completa
@@ -51,6 +52,7 @@ const config: Config = {
   redis: {
     host: process.env.REDIS_HOST || 'redis',
     port: parseInt(process.env.REDIS_PORT || '6379', 10),
+    username: process.env.REDIS_USERNAME || 'default',
     password: process.env.REDIS_PASSWORD || undefined,
     db: parseInt(process.env.REDIS_DB || '0', 10),
     url: process.env.REDIS_URL || undefined, // Connection string completa

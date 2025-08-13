@@ -10,12 +10,12 @@ services:
     environment:
       - NODE_ENV=${NODE_ENV:-production}
       - PORT=3000
-      - REDIS_URL=redis://default:4sBBfBGYfo26H9PYa65sFVBxxK848fPEdgUgGVMp5BcurxpSUKJuz23jTHIkdilD@fo8400okko0gckwcw8gksscc:6379/0
-      - REDIS_HOST=fo8400okko0gckwcw8gksscc
-      - REDIS_PORT=6379
-      - REDIS_PASSWORD=4sBBfBGYfo26H9PYa65sFVBxxK848fPEdgUgGVMp5BcurxpSUKJuz23jTHIkdilD
-      - REDIS_DB=0
-      - PYTHON_AI_URL=https://ai-aleen.dp.claudy.host
+      - REDIS_HOST=${REDIS_HOST}
+      - REDIS_PORT=${REDIS_PORT}
+      - REDIS_USERNAME=${REDIS_USERNAME}
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - REDIS_DB=${REDIS_DB}
+      - PYTHON_AI_URL=${PYTHON_AI_URL}
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - EVOLUTION_API_KEY=${EVOLUTION_API_KEY}
       - EVOLUTION_API_BASE_URL=${EVOLUTION_API_BASE_URL}

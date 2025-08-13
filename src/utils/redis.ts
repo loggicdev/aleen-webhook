@@ -32,12 +32,39 @@ class RedisClient {
         redisUrl: config.redis.url ? config.redis.url.replace(/:([^:@]+)@/, ':***@') : null,
         host: config.redis.host,
         port: config.redis.port,
+        hasUsername: !!config.redis.username,
+        username: config.redis.username,
         hasPassword: !!config.redis.password,
         db: config.redis.db
       });
 
-      // Se houver REDIS_URL, usar connection string
-      if (config.redis.url) {
+      // Priorizar variáveis de ambiente individuais para evitar problemas de URL encoding
+      if (config.redis.host && config.redis.password) {
+        logger.info('Using Redis individual config (preferred method)', {
+          host: config.redis.host,
+          port: config.redis.port,
+          hasUsername: !!config.redis.username,
+          username: config.redis.username,
+          hasPassword: !!config.redis.password,
+          passwordLength: config.redis.password ? config.redis.password.length : 0,
+          db: config.redis.db
+        });
+
+        this.instance = new Redis({
+          host: config.redis.host,
+          port: config.redis.port,
+          username: config.redis.username || 'default',
+          password: config.redis.password,
+          db: config.redis.db,
+          enableReadyCheck: false,
+          maxRetriesPerRequest: null,
+          lazyConnect: true,
+          connectTimeout: 60000,
+          commandTimeout: 30000,
+          family: 4, // Force IPv4
+          keepAlive: 30000
+        });
+      } else if (config.redis.url) {
         logger.info('Using Redis connection string', {
           url: config.redis.url.replace(/:([^:@]+)@/, ':***@'), // Oculta password no log
           hasUrl: true
