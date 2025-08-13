@@ -77,14 +77,15 @@ class AiAgentService {
     recommendedAgent?: string
   ): Promise<ChatResponse> {
     try {
-      logger.info('Starting AI agent communication', {
+      logger.info('🚀 Starting AI agent communication', {
         userId,
         userName,
         messageLength: message.length,
         historyLength: conversationHistory.length,
         recommendedAgent,
         pythonServiceUrl: this.pythonServiceUrl,
-        fullUrl: `${this.pythonServiceUrl}/whatsapp-chat`
+        fullUrl: `${this.pythonServiceUrl}/whatsapp-chat`,
+        timestamp: new Date().toISOString()
       });
 
       const request: ChatRequest = {
@@ -97,15 +98,17 @@ class AiAgentService {
         send_to_whatsapp: true // definir como true para enviar resposta para WhatsApp
       };
 
-      logger.info('Sending request to Python AI service', {
+      logger.info('📤 Sending request to Python AI service', {
         url: `${this.pythonServiceUrl}/whatsapp-chat`,
         request: {
           user_id: request.user_id,
           user_name: request.user_name,
           messageLength: request.message.length,
           historyLength: request.conversation_history?.length || 0,
-          recommended_agent: request.recommended_agent
-        }
+          recommended_agent: request.recommended_agent,
+          send_to_whatsapp: request.send_to_whatsapp
+        },
+        timestamp: new Date().toISOString()
       });
 
       const response = await axios.post<ChatResponse>(
@@ -114,8 +117,7 @@ class AiAgentService {
         {
           timeout: 30000, // 30 segundos
           headers: {
-            'Content-Type': 'application/json',
-            'Host': 'ai-aleen.dp.claudy.host'
+            'Content-Type': 'application/json'
           }
         }
       );
@@ -136,9 +138,14 @@ class AiAgentService {
 
       // Validação da resposta
       if (!response.data.response || response.data.response === 'undefined') {
-        logger.error('Python AI returned undefined or invalid response', {
+        logger.error('⚠️ Python AI returned undefined or invalid response - using fallback', {
+          userId,
+          userName,
+          pythonServiceUrl: this.pythonServiceUrl,
           responseData: response.data,
-          fullResponse: JSON.stringify(response.data)
+          fullResponse: JSON.stringify(response.data),
+          fallbackReason: 'Invalid Python response',
+          fallbackAgent: 'fallback'
         });
         
         return {
@@ -148,9 +155,20 @@ class AiAgentService {
         };
       }
 
+      // Log de sucesso na comunicação com Python
+      logger.info('✅ Python AI service responded successfully', {
+        userId,
+        userName,
+        pythonServiceUrl: this.pythonServiceUrl,
+        agent_used: response.data.agent_used,
+        responseLength: response.data.response ? response.data.response.length : 0,
+        should_handoff: response.data.should_handoff,
+        processingTime: 'Success within timeout'
+      });
+
       return response.data;
     } catch (error) {
-      logger.error('Error communicating with Python AI service', {
+      logger.error('❌ Error communicating with Python AI service', {
         error: error instanceof Error ? error.message : 'Unknown error',
         stack: error instanceof Error ? error.stack : undefined,
         userId,
@@ -178,7 +196,7 @@ class AiAgentService {
       // Detectar se é erro de conexão para usar mensagem específica
       const isConnectionError = this.isConnectionError(error);
       
-      logger.error('Connection error analysis', {
+      logger.error('🔍 Connection error analysis', {
         isConnectionError,
         errorMessage: error instanceof Error ? error.message : 'No message',
         errorCode: (error as any)?.code || 'No code',
@@ -189,9 +207,14 @@ class AiAgentService {
         ? 'Olá! 👋 Nosso sistema de IA está temporariamente em manutenção. Nossa equipe está trabalhando para resolver rapidamente. Que tal tentar novamente em alguns minutos? Se for urgente, você pode entrar em contato conosco diretamente!'
         : 'Olá! Sou a Aleen IA. No momento estou com dificuldades técnicas, mas em breve poderei te ajudar melhor. Como posso te ajudar hoje?';
       
-      logger.info('Using fallback message', {
+      logger.warn('⚠️ Using fallback message due to Python service failure', {
+        userId,
+        userName,
+        pythonServiceUrl: this.pythonServiceUrl,
         isConnectionError,
-        messageType: isConnectionError ? 'maintenance' : 'technical_difficulties'
+        messageType: isConnectionError ? 'maintenance' : 'technical_difficulties',
+        fallbackAgent: 'fallback',
+        reason: isConnectionError ? 'Python service unreachable' : 'Python service error'
       });
       
       return {
@@ -209,10 +232,7 @@ class AiAgentService {
       });
 
       const response = await axios.get(`${this.pythonServiceUrl}/health`, {
-        timeout: 5000,
-        headers: {
-          'Host': 'ai-aleen.dp.claudy.host'
-        }
+        timeout: 5000
       });
 
       logger.info('Python AI service health check result', {
@@ -237,10 +257,7 @@ class AiAgentService {
       });
 
       const response = await axios.get(`${this.pythonServiceUrl}/agents`, {
-        timeout: 5000,
-        headers: {
-          'Host': 'ai-aleen.dp.claudy.host'
-        }
+        timeout: 5000
       });
 
       logger.info('Available agents fetched successfully', {
