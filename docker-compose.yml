@@ -11,8 +11,9 @@ services:
       - NODE_ENV=${NODE_ENV:-production}
       - PORT=3000
       - REDIS_URL=redis://default:4sBBfBGYfo26H9PYa65sFVBxxK848fPEdgUgGVMp5BcurxpSUKJuz23jTHIkdilD@fo8400okko0gckwcw8gksscc:6379/0
-      - REDIS_HOST=redis
+      - REDIS_HOST=fo8400okko0gckwcw8gksscc
       - REDIS_PORT=6379
+      - REDIS_PASSWORD=4sBBfBGYfo26H9PYa65sFVBxxK848fPEdgUgGVMp5BcurxpSUKJuz23jTHIkdilD
       - REDIS_DB=0
       - PYTHON_AI_URL=https://ai-aleen.live.claudy.host
       - OPENAI_API_KEY=${OPENAI_API_KEY}
