@@ -60,7 +60,7 @@ services:
           - redis-server
 
 volumes:
-  redis_data:
+  redis_data: {}
 
 networks:
   app_network:
