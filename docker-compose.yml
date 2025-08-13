@@ -36,11 +36,9 @@ services:
       timeout: 10s
       retries: 3
     networks:
-      - app_network
       - coolify
 
 networks:
   coolify:
     name: coolify
     external: true
-  app_network:
