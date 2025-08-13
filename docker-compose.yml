@@ -41,5 +41,6 @@ services:
 
 networks:
   coolify:
+    name: coolify
     external: true
   app_network:
