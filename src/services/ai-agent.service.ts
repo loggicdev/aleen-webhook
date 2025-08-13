@@ -5,9 +5,11 @@ import logger from '../utils/logger';
 interface ChatRequest {
   user_id: string;
   user_name: string;
+  phone_number: string;
   message: string;
   conversation_history?: string[];
   recommended_agent?: string;
+  send_to_whatsapp: boolean;
 }
 
 interface ChatResponse {
@@ -87,13 +89,15 @@ class AiAgentService {
       const request: ChatRequest = {
         user_id: userId,
         user_name: userName,
+        phone_number: userId, // usar o userId como phone_number
         message,
         conversation_history: conversationHistory,
-        recommended_agent: recommendedAgent
+        recommended_agent: recommendedAgent,
+        send_to_whatsapp: true // definir como true para enviar resposta para WhatsApp
       };
 
       logger.info('Sending request to Python AI service', {
-        url: `${this.pythonServiceUrl}/chat`,
+        url: `${this.pythonServiceUrl}/whatsapp-chat`,
         request: {
           user_id: request.user_id,
           user_name: request.user_name,
