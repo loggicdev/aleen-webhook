@@ -83,7 +83,8 @@ class AiAgentService {
         messageLength: message.length,
         historyLength: conversationHistory.length,
         recommendedAgent,
-        pythonServiceUrl: this.pythonServiceUrl
+        pythonServiceUrl: this.pythonServiceUrl,
+        fullUrl: `${this.pythonServiceUrl}/whatsapp-chat`
       });
 
       const request: ChatRequest = {
@@ -113,7 +114,8 @@ class AiAgentService {
         {
           timeout: 30000, // 30 segundos
           headers: {
-            'Content-Type': 'application/json'
+            'Content-Type': 'application/json',
+            'Host': 'ai-aleen.dp.claudy.host'
           }
         }
       );
@@ -154,15 +156,35 @@ class AiAgentService {
         userId,
         userName,
         messageLength: message.length,
+        pythonServiceUrl: this.pythonServiceUrl,
+        fullUrl: `${this.pythonServiceUrl}/whatsapp-chat`,
+        errorType: error?.constructor?.name,
         isAxiosError: error && typeof error === 'object' && 'isAxiosError' in error,
         ...(error && typeof error === 'object' && 'response' in error && error.response ? {
           responseStatus: (error.response as any).status,
-          responseData: (error.response as any).data
+          responseData: (error.response as any).data,
+          responseHeaders: (error.response as any).headers
+        } : {}),
+        ...(error && typeof error === 'object' && 'request' in error && error.request ? {
+          hasRequest: true,
+          requestMethod: (error.request as any).method,
+          requestUrl: (error.request as any).url
+        } : {}),
+        ...(error && typeof error === 'object' && 'code' in error ? {
+          errorCode: (error as any).code
         } : {})
       });
       
       // Detectar se é erro de conexão para usar mensagem específica
       const isConnectionError = this.isConnectionError(error);
+      
+      logger.error('Connection error analysis', {
+        isConnectionError,
+        errorMessage: error instanceof Error ? error.message : 'No message',
+        errorCode: (error as any)?.code || 'No code',
+        errorName: (error as any)?.name || 'No name'
+      });
+      
       const fallbackMessage = isConnectionError 
         ? 'Olá! 👋 Nosso sistema de IA está temporariamente em manutenção. Nossa equipe está trabalhando para resolver rapidamente. Que tal tentar novamente em alguns minutos? Se for urgente, você pode entrar em contato conosco diretamente!'
         : 'Olá! Sou a Aleen IA. No momento estou com dificuldades técnicas, mas em breve poderei te ajudar melhor. Como posso te ajudar hoje?';
@@ -187,7 +209,10 @@ class AiAgentService {
       });
 
       const response = await axios.get(`${this.pythonServiceUrl}/health`, {
-        timeout: 5000
+        timeout: 5000,
+        headers: {
+          'Host': 'ai-aleen.dp.claudy.host'
+        }
       });
 
       logger.info('Python AI service health check result', {
@@ -212,7 +237,10 @@ class AiAgentService {
       });
 
       const response = await axios.get(`${this.pythonServiceUrl}/agents`, {
-        timeout: 5000
+        timeout: 5000,
+        headers: {
+          'Host': 'ai-aleen.dp.claudy.host'
+        }
       });
 
       logger.info('Available agents fetched successfully', {
