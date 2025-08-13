@@ -48,8 +48,8 @@ class RedisClient {
         const redisConfig = {
           host: url.hostname,
           port: parseInt(url.port) || 6379,
-          password: url.password || undefined,
-          username: url.username && url.username !== 'default' ? url.username : undefined,
+          username: url.username && url.username !== 'default' ? url.username : 'default',
+          password: url.password || config.redis.password,
           db: parseInt(url.pathname.slice(1)) || 0,
           enableReadyCheck: false,
           maxRetriesPerRequest: null,
@@ -113,6 +113,14 @@ class RedisClient {
           error: error.message,
           stack: error.stack
         });
+        
+        // Se for erro de autenticação, tentar reconectar com configuração manual
+        if (error.message.includes('NOAUTH') || error.message.includes('Authentication required')) {
+          logger.warn('Authentication error detected, attempting manual auth');
+          this.instance?.auth(config.redis.password || '').catch(authError => {
+            logger.error('Manual auth failed', { error: authError.message });
+          });
+        }
       });
 
       this.instance.on('close', () => {
