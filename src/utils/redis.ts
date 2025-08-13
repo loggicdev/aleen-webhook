@@ -47,6 +47,11 @@ class RedisClient {
           enableReadyCheck: false,
           maxRetriesPerRequest: null,
           lazyConnect: true,
+          connectTimeout: 60000,
+          commandTimeout: 30000,
+          family: 4, // Force IPv4
+          keepAlive: 30000,
+          tls: config.redis.url.startsWith('rediss://') ? {} : undefined
         });
       } else {
         // Fallback para configuração individual
@@ -65,6 +70,10 @@ class RedisClient {
           enableReadyCheck: false,
           maxRetriesPerRequest: null,
           lazyConnect: true,
+          connectTimeout: 60000,
+          commandTimeout: 30000,
+          family: 4, // Force IPv4
+          keepAlive: 30000
         });
       }
 
