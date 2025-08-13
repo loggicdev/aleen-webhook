@@ -43,7 +43,14 @@ class RedisClient {
           hasUrl: true
         });
 
-        this.instance = new Redis(config.redis.url, {
+        // Parse manual da URL para garantir que a autenticação funcione
+        const url = new URL(config.redis.url);
+        const redisConfig = {
+          host: url.hostname,
+          port: parseInt(url.port) || 6379,
+          password: url.password || undefined,
+          username: url.username && url.username !== 'default' ? url.username : undefined,
+          db: parseInt(url.pathname.slice(1)) || 0,
           enableReadyCheck: false,
           maxRetriesPerRequest: null,
           lazyConnect: true,
@@ -51,7 +58,19 @@ class RedisClient {
           commandTimeout: 30000,
           family: 4, // Force IPv4
           keepAlive: 30000
+        };
+
+        logger.info('Parsed Redis config', {
+          host: redisConfig.host,
+          port: redisConfig.port,
+          hasPassword: !!redisConfig.password,
+          passwordLength: redisConfig.password ? redisConfig.password.length : 0,
+          hasUsername: !!redisConfig.username,
+          username: redisConfig.username,
+          db: redisConfig.db
         });
+
+        this.instance = new Redis(redisConfig);
       } else {
         // Fallback para configuração individual
         logger.info('Using Redis individual config (no URL found)', {
