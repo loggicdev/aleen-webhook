@@ -41,6 +41,4 @@ services:
 
 networks:
   coolify:
-    driver: bridge
   app_network:
-    driver: bridge
