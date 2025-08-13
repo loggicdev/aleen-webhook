@@ -50,8 +50,7 @@ class RedisClient {
           connectTimeout: 60000,
           commandTimeout: 30000,
           family: 4, // Force IPv4
-          keepAlive: 30000,
-          tls: config.redis.url.startsWith('rediss://') ? {} : undefined
+          keepAlive: 30000
         });
       } else {
         // Fallback para configuração individual

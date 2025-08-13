@@ -10,10 +10,9 @@ services:
     environment:
       - NODE_ENV=${NODE_ENV:-production}
       - PORT=3000
-      - REDIS_URL=rediss://default:ZWfqOUxs73mj80zl8xmsme8qNBr2RgiNj0Uo0T3xxPCu2OuIyFajsd5hPsUBlEUD@ocw00so4sg4o8g8ksscwokok:6380/0
-      - REDIS_HOST=ocw00so4sg4o8g8ksscwokok
-      - REDIS_PORT=6380
-      - REDIS_PASSWORD=ZWfqOUxs73mj80zl8xmsme8qNBr2RgiNj0Uo0T3xxPCu2OuIyFajsd5hPsUBlEUD
+      - REDIS_URL=redis://redis:6379
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
       - REDIS_DB=0
       - PYTHON_AI_URL=https://ai-aleen.live.claudy.host
       - OPENAI_API_KEY=${OPENAI_API_KEY}
@@ -29,12 +28,44 @@ services:
       - NEXT_PUBLIC_SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL}
       - NEXT_PUBLIC_SUPABASE_ANON_KEY=${NEXT_PUBLIC_SUPABASE_ANON_KEY}
       - SUPABASE_JWT_SECRET=${SUPABASE_JWT_SECRET}
+    depends_on:
+      redis:
+        condition: service_healthy
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000/api/webhook/health"]
       interval: 30s
       timeout: 10s
       retries: 3
+    networks:
+      - app_network
+
+  redis:
+    image: redis:7-alpine
+    container_name: redis-server
+    hostname: redis
+    ports:
+      - "6380:6379"
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    networks:
+      app_network:
+        aliases:
+          - redis-server
 
 volumes:
-  # Volumes removidos pois Redis é externo
+  redis_data:
+
+networks:
+  app_network:
+    driver: bridge
+    driver_opts:
+      com.docker.network.bridge.enable_icc: "true"
+      com.docker.network.bridge.enable_ip_masquerade: "true"
+      com.docker.network.driver.mtu: "1500"
