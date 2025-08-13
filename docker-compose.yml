@@ -3,6 +3,8 @@ version: '3.8'
 services:
   aleen-ia:
     build: .
+    container_name: aleen-ia-app
+    hostname: aleen-ia
     ports:
       - "3001:3000"
     environment:
@@ -40,6 +42,8 @@ services:
 
   redis:
     image: redis:7-alpine
+    container_name: redis-server
+    hostname: redis
     ports:
       - "6380:6379"
     volumes:
@@ -51,7 +55,9 @@ services:
       timeout: 5s
       retries: 3
     networks:
-      - app_network
+      app_network:
+        aliases:
+          - redis-server
 
 volumes:
   redis_data:
@@ -59,3 +65,7 @@ volumes:
 networks:
   app_network:
     driver: bridge
+    driver_opts:
+      com.docker.network.bridge.enable_icc: "true"
+      com.docker.network.bridge.enable_ip_masquerade: "true"
+      com.docker.network.driver.mtu: "1500"
