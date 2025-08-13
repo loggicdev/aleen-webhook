@@ -104,7 +104,7 @@ class AiAgentService {
       });
 
       const response = await axios.post<ChatResponse>(
-        `${this.pythonServiceUrl}/chat`,
+        `${this.pythonServiceUrl}/whatsapp-chat`,
         request,
         {
           timeout: 30000, // 30 segundos
