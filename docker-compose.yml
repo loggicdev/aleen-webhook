@@ -10,7 +10,7 @@ services:
     environment:
       - NODE_ENV=${NODE_ENV:-production}
       - PORT=3000
-      - REDIS_URL=redis://redis:6379
+      - REDIS_URL=redis://default:4sBBfBGYfo26H9PYa65sFVBxxK848fPEdgUgGVMp5BcurxpSUKJuz23jTHIkdilD@fo8400okko0gckwcw8gksscc:6379/0
       - REDIS_HOST=redis
       - REDIS_PORT=6379
       - REDIS_DB=0
