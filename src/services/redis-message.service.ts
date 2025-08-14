@@ -237,16 +237,28 @@ export class RedisMessageService {
                 const conversationHistory = await this.getConversationHistory(userData.userNumber);
                 
                 // Constrói o contexto do usuário para o Python
+                const userId = userStatus.isUser ? userStatus.userData?.id : undefined;
+                const onboardingUrl = userId ? `https://aleen.dp.claudy.host/onboarding/${userId}` : null;
+                
                 const userContext = {
-                  user_id: userStatus.isUser ? userStatus.userData?.id : undefined,
+                  user_id: userId,
                   has_account: userStatus.isUser,
                   onboarding_completed: userStatus.onboardingCompleted,
                   user_type: userStatus.isFirstMessage ? 'new_user' : 
                             (!userStatus.onboardingCompleted ? 'incomplete_onboarding' : 'complete_user'),
-                  onboarding_url: null,
+                  onboarding_url: onboardingUrl,
                   is_lead: userStatus.isLead,
                   is_user: userStatus.isUser
                 };
+
+                logger.info('User context constructed for AI processing', {
+                  userId,
+                  onboardingUrl,
+                  userType: userContext.user_type,
+                  hasAccount: userContext.has_account,
+                  onboardingCompleted: userContext.onboarding_completed,
+                  userNumber: userData.userNumber
+                });
                 
                 aiResponse = await MessageProcessorService.processTextWithAI(
                   userData.userNumber,
