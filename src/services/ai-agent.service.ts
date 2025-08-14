@@ -2,14 +2,25 @@ import axios from 'axios';
 import config from '../config';
 import logger from '../utils/logger';
 
+interface UserContext {
+  user_id?: string;
+  has_account: boolean;
+  onboarding_completed: boolean;
+  user_type: string; // 'new_user' | 'incomplete_onboarding' | 'complete_user'
+  onboarding_url?: string | null;
+  is_lead: boolean;
+  is_user: boolean;
+}
+
 interface ChatRequest {
   user_id: string;
   user_name: string;
   phone_number: string;
   message: string;
   conversation_history?: string[];
-  recommended_agent?: string;
+  recommended_agent?: string | null;
   send_to_whatsapp: boolean;
+  user_context?: UserContext;
 }
 
 interface ChatResponse {
@@ -70,32 +81,42 @@ class AiAgentService {
   }
 
   async processMessage(
-    userId: string,
+    phoneNumber: string,
     userName: string,
     message: string,
     conversationHistory: string[] = [],
-    recommendedAgent?: string
+    recommendedAgent?: string,
+    userContext?: UserContext
   ): Promise<ChatResponse> {
     try {
       logger.info('🚀 Starting AI agent communication', {
-        userId,
+        phoneNumber,
         userName,
         messageLength: message.length,
         historyLength: conversationHistory.length,
         recommendedAgent,
+        userContext,
         pythonServiceUrl: this.pythonServiceUrl,
         fullUrl: `${this.pythonServiceUrl}/whatsapp-chat`,
         timestamp: new Date().toISOString()
       });
 
       const request: ChatRequest = {
-        user_id: userId,
+        user_id: userContext?.user_id || `temp-id-${Date.now()}`,
         user_name: userName,
-        phone_number: userId, // usar o userId como phone_number
+        phone_number: phoneNumber, // phoneNumber é o número limpo
         message,
         conversation_history: conversationHistory,
-        recommended_agent: recommendedAgent,
-        send_to_whatsapp: true // definir como true para enviar resposta para WhatsApp
+        recommended_agent: recommendedAgent || null,
+        send_to_whatsapp: true,
+        user_context: userContext || {
+          has_account: false,
+          onboarding_completed: false,
+          user_type: 'new_user',
+          onboarding_url: null,
+          is_lead: false,
+          is_user: false
+        }
       };
 
       logger.info('📤 Sending request to Python AI service', {
@@ -139,7 +160,7 @@ class AiAgentService {
       // Validação da resposta
       if (!response.data.response || response.data.response === 'undefined') {
         logger.error('⚠️ Python AI returned undefined or invalid response - using fallback', {
-          userId,
+          phoneNumber,
           userName,
           pythonServiceUrl: this.pythonServiceUrl,
           responseData: response.data,
@@ -157,7 +178,7 @@ class AiAgentService {
 
       // Log de sucesso na comunicação com Python
       logger.info('✅ Python AI service responded successfully', {
-        userId,
+        phoneNumber,
         userName,
         pythonServiceUrl: this.pythonServiceUrl,
         agent_used: response.data.agent_used,
@@ -171,7 +192,7 @@ class AiAgentService {
       logger.error('❌ Error communicating with Python AI service', {
         error: error instanceof Error ? error.message : 'Unknown error',
         stack: error instanceof Error ? error.stack : undefined,
-        userId,
+        phoneNumber,
         userName,
         messageLength: message.length,
         pythonServiceUrl: this.pythonServiceUrl,
@@ -208,7 +229,7 @@ class AiAgentService {
         : 'Olá! Sou a Aleen IA. No momento estou com dificuldades técnicas, mas em breve poderei te ajudar melhor. Como posso te ajudar hoje?';
       
       logger.warn('⚠️ Using fallback message due to Python service failure', {
-        userId,
+        phoneNumber,
         userName,
         pythonServiceUrl: this.pythonServiceUrl,
         isConnectionError,

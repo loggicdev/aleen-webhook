@@ -201,6 +201,11 @@ export class RedisMessageService {
             const userData = this.getUserDataFromRedisKey(redisKey);
             let userStatus: UserStatus | null = null;
             
+            // Salva mensagem do usuário no histórico
+            if (userData) {
+              await this.saveToConversationHistory(userData.userNumber, aggregatedMessage, true);
+            }
+            
             if (userData) {
               try {
                 userStatus = await supabaseUserService.checkUserStatus(userData.userNumber);
@@ -228,12 +233,28 @@ export class RedisMessageService {
             try {
               if (userData && userStatus) {
                 // Usa o agente recomendado baseado no status do usuário
+                // Busca histórico recente de conversação
+                const conversationHistory = await this.getConversationHistory(userData.userNumber);
+                
+                // Constrói o contexto do usuário para o Python
+                const userContext = {
+                  user_id: userStatus.isUser ? userStatus.userData?.id : undefined,
+                  has_account: userStatus.isUser,
+                  onboarding_completed: userStatus.onboardingCompleted,
+                  user_type: userStatus.isFirstMessage ? 'new_user' : 
+                            (!userStatus.onboardingCompleted ? 'incomplete_onboarding' : 'complete_user'),
+                  onboarding_url: null,
+                  is_lead: userStatus.isLead,
+                  is_user: userStatus.isUser
+                };
+                
                 aiResponse = await MessageProcessorService.processTextWithAI(
                   userData.userNumber,
                   userData.userName,
                   aggregatedMessage,
-                  [], // TODO: buscar histórico do Redis/Supabase
-                  userStatus.recommendedAgent
+                  conversationHistory,
+                  userStatus.recommendedAgent,
+                  userContext
                 );
 
                 logger.info('AI Agent processed message', {
@@ -504,6 +525,66 @@ export class RedisMessageService {
     } catch (error) {
       this.processing.delete(redisKey);
       throw error;
+    }
+  }
+
+  /**
+   * Busca histórico recente de conversação do usuário
+   */
+  private static async getConversationHistory(userNumber: string): Promise<string[]> {
+    try {
+      const redis = await RedisClient.getInstance();
+      const historyKey = `history:${userNumber}`;
+      
+      // Busca as últimas 10 mensagens do histórico
+      const history = await redis.lrange(historyKey, -10, -1);
+      
+      logger.info('Retrieved conversation history', {
+        userNumber,
+        historyKey,
+        messageCount: history.length
+      });
+      
+      return history;
+    } catch (error) {
+      logger.error('Error retrieving conversation history', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+        userNumber
+      });
+      return [];
+    }
+  }
+
+  /**
+   * Salva mensagem no histórico de conversação
+   */
+  private static async saveToConversationHistory(userNumber: string, message: string, isUser: boolean = true): Promise<void> {
+    try {
+      const redis = await RedisClient.getInstance();
+      const historyKey = `history:${userNumber}`;
+      const timestamp = new Date().toISOString();
+      const historyEntry = `${timestamp}|${isUser ? 'USER' : 'AI'}|${message}`;
+      
+      // Adiciona ao histórico
+      await redis.rpush(historyKey, historyEntry);
+      
+      // Mantém apenas as últimas 50 mensagens
+      await redis.ltrim(historyKey, -50, -1);
+      
+      // Define expiração de 7 dias
+      await redis.expire(historyKey, 7 * 24 * 60 * 60);
+      
+      logger.debug('Saved message to conversation history', {
+        userNumber,
+        historyKey,
+        messageLength: message.length,
+        isUser
+      });
+    } catch (error) {
+      logger.error('Error saving to conversation history', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+        userNumber
+      });
     }
   }
 }

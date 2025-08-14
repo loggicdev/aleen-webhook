@@ -17,6 +17,7 @@ interface User {
   phone: string;
   name?: string;
   nickname?: string;
+  onboarding?: boolean;  // Campo onboarding na tabela users
   created_at: string;
 }
 
@@ -75,17 +76,18 @@ class SupabaseUserService {
       if (userData && !userError) {
         logger.info('User found in users table', { 
           userId: userData.id,
-          name: userData.name
+          name: userData.name,
+          onboarding: userData.onboarding
         });
 
         return {
           isLead: false,
           isUser: true,
           isFirstMessage: false,
-          onboardingCompleted: true,
+          onboardingCompleted: userData.onboarding || false,
           userData,
-          needsOnboarding: false,
-          recommendedAgent: 'DOUBT' // Usuários existentes vão para suporte
+          needsOnboarding: !userData.onboarding,
+          recommendedAgent: userData.onboarding ? 'DOUBT' : 'GREETING_WITHOUT_MEMORY'
         };
       }
 

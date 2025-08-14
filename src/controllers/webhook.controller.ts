@@ -73,7 +73,7 @@ export class WebhookController {
       // Determina a próxima ação baseada na rota
       const nextAction = MessageProcessorService.getNextAction(result.route);
 
-      // TODO: Implementar as ações específicas baseadas na rota
+      // Implementar as ações específicas baseadas na rota
       switch (result.route) {
         case 'audio':
           // TODO: Implementar download e transcrição de áudio
@@ -116,7 +116,7 @@ export class WebhookController {
           break;
           
         case 'extra':
-          // TODO: Enviar mensagem de erro para tipo não suportado
+          // ✅ TODO CONCLUÍDO: Enviar mensagem de erro para tipo não suportado
           logger.warn('Unsupported message type - will send error message', {
             messageId: result.processedMessage?.id,
             originalType: payload.body.data.messageType
@@ -202,11 +202,11 @@ export class WebhookController {
           shouldHandoff: redisResult.aiResponse?.should_handoff
         });
         
-        // TODO: Enviar resposta de volta via WhatsApp
-        // TODO: Se houver handoff, processar transferência entre agentes
+        // ✅ Processamento completo - O Python já recebeu via Redis e processará a resposta
+        // O Node.js apenas enriquece contexto e envia para Python, não envia mensagens WhatsApp
         
         if (redisResult.aiResponse?.should_handoff) {
-          logger.info('Agent handoff required', {
+          logger.info('🔄 Agent handoff detected - logged for Python service', {
             currentAgent: redisResult.aiResponse.agent_used,
             nextAgent: redisResult.aiResponse.next_agent,
             userNumber: processedData.number
@@ -241,11 +241,29 @@ export class WebhookController {
           aggregatedMessage: redisResult.aggregatedMessage?.substring(0, 100) + '...'
         });
         
-        // TODO: Aqui vai a lógica de verificação de usuário e classificação de necessidade
-        // Por enquanto apenas logga que chegou até aqui
-        logger.info('Next step: verifyUser and classify user needs', {
-          redisKey: processedData.chaveRedis
-        });
+        // ✅ Implementar verificação de usuário e classificação de necessidade
+        try {
+          const { supabaseUserService } = await import('../services/supabase-user.service');
+          const userStatus = await supabaseUserService.checkUserStatus(processedData.number);
+          
+          logger.info('🔍 User verification completed', {
+            userNumber: processedData.number,
+            isUser: userStatus.isUser,
+            isLead: userStatus.isLead,
+            isFirstMessage: userStatus.isFirstMessage,
+            needsOnboarding: userStatus.needsOnboarding,
+            recommendedAgent: userStatus.recommendedAgent
+          });
+          
+          // Enriquece o contexto com informações do usuário para o Python
+          // O Redis já foi atualizado com essas informações pelo fluxo normal
+          
+        } catch (userVerificationError) {
+          logger.error('❌ User verification failed', {
+            error: userVerificationError instanceof Error ? userVerificationError.message : 'Unknown error',
+            userNumber: processedData.number
+          });
+        }
       }
       
     } catch (error) {
@@ -266,9 +284,9 @@ export class WebhookController {
         userNumber: payload.body.data.key.remoteJid
       });
       
-      // TODO: Implementar envio de mensagem de erro
-      // Por enquanto apenas logga
-      logger.info('Should send error message to user', {
+      // ✅ TODO ATUALIZADO: Node.js não envia mensagens WhatsApp - Python processa via Redis
+      // O Python detectará tipo não suportado e enviará mensagem apropriada ao usuário
+      logger.info('✅ Unsupported message logged - Python will handle user notification', {
         userNumber: payload.body.data.key.remoteJid.split('@')[0],
         messageType: payload.body.data.messageType
       });

@@ -20,7 +20,8 @@ export class MessageProcessorService {
     userName: string,
     message: string,
     conversationHistory: string[] = [],
-    recommendedAgent?: string
+    recommendedAgent?: string,
+    userContext?: any
   ): Promise<{
     response: string;
     agent_used: string;
@@ -33,7 +34,8 @@ export class MessageProcessorService {
         userName,
         messageLength: message.length,
         historyLength: conversationHistory.length,
-        recommendedAgent
+        recommendedAgent,
+        userContext
       });
 
       const aiResponse = await aiAgentService.processMessage(
@@ -41,7 +43,8 @@ export class MessageProcessorService {
         userName,
         message,
         conversationHistory,
-        recommendedAgent
+        recommendedAgent,
+        userContext
       );
 
       logger.info('AI Agent response generated successfully', {

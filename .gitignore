@@ -29,8 +29,12 @@ coverage/
 # IDEs
 .vscode/
 .idea/
+.cursor/
 *.swp
 *.swo
+
+# BMAD Core
+.bmad-core/
 
 # OS
 .DS_Store
