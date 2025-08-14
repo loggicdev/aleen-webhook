@@ -244,25 +244,14 @@ export class RedisMessageService {
                   userStatus: userStatus.recommendedAgent
                 });
 
-                // Envia resposta da IA via Evolution API
-                const sendResult = await evolutionApiService.sendAgentMessage(
-                  userData.userNumber,
-                  aiResponse.response,
-                  aiResponse.agent_used
-                );
-
-                if (sendResult.success) {
-                  logger.info('AI response sent successfully', {
-                    userNumber: userData.userNumber,
-                    messageId: sendResult.messageId,
-                    agent: aiResponse.agent_used
-                  });
-                } else {
-                  logger.error('Failed to send AI response', {
-                    userNumber: userData.userNumber,
-                    error: sendResult.error
-                  });
-                }
+                // ❌ REMOVIDO: Envio duplicado do Node.js 
+                // O Python já envia as mensagens com send_to_whatsapp: true
+                // Mantemos apenas o processamento e logging
+                logger.info('Python AI service handles message sending', {
+                  userNumber: userData.userNumber,
+                  agent: aiResponse.agent_used,
+                  pythonHandlesSending: true
+                });
               }
             } catch (aiError) {
               logger.error('AI processing failed', {
@@ -289,43 +278,23 @@ export class RedisMessageService {
               });
 
               if (isConnectionError && userData) {
-                // Gera resposta de fallback informativa sobre o serviço estar offline
+                // ❌ REMOVIDO: Envio de fallback duplicado do Node.js
+                // O Python handles todas as mensagens, incluindo fallbacks
                 try {
-                  logger.warn('Python AI service is unavailable, sending informative fallback message', {
+                  logger.warn('Python AI service is unavailable, Python will handle fallback messaging', {
                     redisKey,
-                    userNumber: userData.userNumber
+                    userNumber: userData.userNumber,
+                    pythonHandlesFallback: true
                   });
 
-                  const fallbackMessage = "Olá! Sou a Aleen IA. 🤖\n\nNo momento nossos sistemas de IA estão passando por uma manutenção técnica, mas estarei de volta em breve para te ajudar da melhor forma!\n\nEnquanto isso, você pode me enviar sua dúvida que assim que eu voltar, respondo com todo cuidado. 💪\n\nObrigada pela paciência!";
-
-                  // Envia a mensagem de fallback via Evolution API
-                  const sendResult = await evolutionApiService.sendAgentMessage(
-                    userData.userNumber,
-                    fallbackMessage,
-                    'fallback'
-                  );
-
-                  if (sendResult.success) {
-                    logger.info('Fallback message sent successfully during Python AI outage', {
-                      userNumber: userData.userNumber,
-                      messageId: sendResult.messageId
-                    });
-                    
-                    // Define resposta para logging
-                    aiResponse = {
-                      response: fallbackMessage,
-                      agent_used: 'fallback',
-                      should_handoff: false
-                    };
-                  } else {
-                    logger.error('Failed to send fallback message during Python AI outage', {
-                      userNumber: userData.userNumber,
-                      error: sendResult.error
-                    });
-                    aiResponse = null;
-                  }
+                  // Define resposta para logging (sem envio pelo Node.js)
+                  aiResponse = {
+                    response: "Python AI service unavailable - fallback handled by Python",
+                    agent_used: 'fallback',
+                    should_handoff: false
+                  };
                 } catch (fallbackError) {
-                  logger.error('Error sending fallback message', {
+                  logger.error('Error processing fallback info', {
                     redisKey,
                     error: fallbackError instanceof Error ? fallbackError.message : 'Unknown fallback error'
                   });
