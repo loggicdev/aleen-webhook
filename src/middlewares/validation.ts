@@ -19,8 +19,9 @@ const evolutionWebhookSchema = Joi.object({
     messageType: Joi.string().required(),
     messageTimestamp: Joi.number().required(),
     instanceId: Joi.string().required(),
-    source: Joi.string().valid('ios', 'android', 'web').required()
-  }).required(),
+    source: Joi.string().valid('ios', 'android', 'web').required(),
+    status: Joi.string().optional() // Adicionado campo status que a Evolution API envia
+  }).unknown(true), // Permite campos adicionais no objeto data
   destination: Joi.string().uri().optional(),
   date_time: Joi.string().isoDate().optional(),
   sender: Joi.string().optional(),
@@ -28,7 +29,7 @@ const evolutionWebhookSchema = Joi.object({
   apikey: Joi.string().required(),
   webhookUrl: Joi.string().uri().optional(),
   executionMode: Joi.string().valid('production', 'development').optional()
-});
+}).unknown(true); // Permite campos adicionais no objeto raiz
 
 /**
  * Middleware para validar payload do webhook
